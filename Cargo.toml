@@ -1,8 +1,8 @@
 [package]
-name = "keyboard_settings"
+name = "openperiph"
 version = "0.1.0"
 edition = "2021"
-description = "A simple settings editor for the CIY X78 keyboard (key remapping and lighting)"
+description = "Open settings app for PC peripherals (CIY X78 keyboard, Attack Shark R5 ULTRA mouse) without the vendor software"
 
 [dependencies]
 eframe = "0.37.0"

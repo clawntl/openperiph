@@ -103,7 +103,7 @@ impl DeviceEntry {
     }
 }
 
-pub struct PeripheralsApp {
+pub struct OpenPeriphApp {
     devices: Vec<DeviceEntry>,
     selected: usize,
     tab: Tab,
@@ -123,7 +123,7 @@ pub struct PeripheralsApp {
     screenshot_sent: bool,
 }
 
-impl PeripheralsApp {
+impl OpenPeriphApp {
     /// `page` (a hidden option for checks): "lighting", or "mouse" to open the first mouse.
     pub fn new(cc: &eframe::CreationContext<'_>, screenshot: Option<PathBuf>, page: Option<String>) -> Self {
         style(&cc.egui_ctx);
@@ -157,7 +157,7 @@ impl PeripheralsApp {
             "lighting" => (0, Tab::Lighting),
             _ => (0, Tab::Keys),
         };
-        PeripheralsApp {
+        OpenPeriphApp {
             devices,
             selected,
             tab,
@@ -333,7 +333,7 @@ impl PeripheralsApp {
         ui.add_space(18.0);
         ui.horizontal(|ui| {
             ui.add_space(4.0);
-            ui.label(RichText::new("Peripherals").size(22.0).strong().color(Color32::WHITE));
+            ui.label(RichText::new("OpenPeriph").size(22.0).strong().color(Color32::WHITE));
         });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
@@ -767,7 +767,7 @@ impl PeripheralsApp {
 // ---------------------------------------------------------------------------------------------
 // Mouse page
 
-impl PeripheralsApp {
+impl OpenPeriphApp {
     /// Keeps the open page one the selected device has.
     fn fix_tab(&mut self) {
         let caps = self.devices[self.selected].driver.capabilities();
@@ -972,7 +972,7 @@ impl PeripheralsApp {
     }
 }
 
-impl eframe::App for PeripheralsApp {
+impl eframe::App for OpenPeriphApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll(&ctx);

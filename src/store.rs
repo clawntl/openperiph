@@ -1,5 +1,5 @@
 //! Remembers each device's settings between runs (the keyboard can't report its key table back,
-//! so the app keeps its own copy). Stored as JSON under %APPDATA%\Peripherals.
+//! so the app keeps its own copy). Stored as JSON under %APPDATA%\OpenPeriph.
 
 use std::path::PathBuf;
 
@@ -21,7 +21,13 @@ fn dir() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA").map(PathBuf::from).or_else(|| {
         std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config"))
     })?;
-    Some(base.join("Peripherals"))
+    let dir = base.join("OpenPeriph");
+    // The app was called "Peripherals" before; carry its saved settings over once.
+    let old = base.join("Peripherals");
+    if !dir.exists() && old.is_dir() {
+        let _ = std::fs::rename(&old, &dir);
+    }
+    Some(dir)
 }
 
 pub fn load(device_id: &str) -> Saved {

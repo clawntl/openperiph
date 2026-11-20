@@ -1,4 +1,4 @@
-# Peripherals
+# OpenPeriph
 
 A small, modern settings app for PC peripherals, written in Rust with
 [eframe/egui](https://github.com/emilk/egui). Windows only for now (it talks to devices through
@@ -20,7 +20,7 @@ Needs the Rust toolchain (and, with the GNU toolchain, MinGW's `dlltool`/`as` on
 
 ```
 cargo build --release
-target\release\keyboard_settings.exe
+target\release\openperiph.exe
 ```
 
 `--screenshot <file.png>` opens the window quietly, draws it, saves a picture and exits.
