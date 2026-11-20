@@ -1,0 +1,15 @@
+[package]
+name = "keyboard_settings"
+version = "0.1.0"
+edition = "2021"
+description = "A simple settings editor for the CIY X78 keyboard (key remapping and lighting)"
+
+[dependencies]
+eframe = "0.37.0"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Devices_HumanInterfaceDevice", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Storage_FileSystem", "Win32_Security"] }
+
+[profile.release]
+opt-level = 3

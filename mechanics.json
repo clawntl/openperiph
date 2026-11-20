@@ -1,0 +1,363 @@
+{
+  "version": 1,
+  "values": [
+    {
+      "name": "usb vendor id",
+      "group": "device",
+      "value": "0x258A",
+      "source": "Cfg.ini VID; path match at 0x43f0d0"
+    },
+    {
+      "name": "usb product id",
+      "group": "device",
+      "value": "0x0016",
+      "source": "Cfg.ini PID; path match at 0x43f0d0"
+    },
+    {
+      "name": "hid usage page",
+      "group": "device",
+      "value": "0xFF00",
+      "source": "OpenHidDevice call at 0x43f16b"
+    },
+    {
+      "name": "hid usage",
+      "group": "device",
+      "value": 1,
+      "source": "OpenHidDevice call at 0x43f16b"
+    },
+    {
+      "name": "data report length",
+      "group": "device",
+      "value": 1032,
+      "unit": "bytes",
+      "source": "filter function 0x43f030"
+    },
+    {
+      "name": "command report length",
+      "group": "device",
+      "value": 6,
+      "unit": "bytes",
+      "source": "filter function 0x43f040"
+    },
+    {
+      "name": "send retries",
+      "group": "device",
+      "value": 3,
+      "source": "function 0x43f460"
+    },
+    {
+      "name": "retry pause",
+      "group": "device",
+      "value": 100,
+      "unit": "ms",
+      "source": "function 0x43f460"
+    },
+    {
+      "name": "unlock command",
+      "group": "protocol",
+      "value": "05 01 AA BB 2F 3E 00 00 00",
+      "source": "function 0x43f4e0, Cfg.ini PSD"
+    },
+    {
+      "name": "read settings command",
+      "group": "protocol",
+      "value": "05 83 00 00 00 00 00",
+      "source": "function 0x43f6b0"
+    },
+    {
+      "name": "settings reply marker",
+      "group": "protocol",
+      "value": "0x83",
+      "source": "check at 0x43f79d"
+    },
+    {
+      "name": "write settings header",
+      "group": "protocol",
+      "value": "03 00 00 00 00 00 00",
+      "source": "function 0x43f5b0"
+    },
+    {
+      "name": "write key table header",
+      "group": "protocol",
+      "value": "04 C8 00 40 00 00 00",
+      "source": "function 0x43f890"
+    },
+    {
+      "name": "settings block size",
+      "group": "protocol",
+      "value": 136,
+      "unit": "bytes",
+      "source": "copy of 0x22 dwords at 0x43f7b1"
+    },
+    {
+      "name": "key table size",
+      "group": "protocol",
+      "value": 1024,
+      "unit": "bytes",
+      "source": "function 0x43f890"
+    },
+    {
+      "name": "key entries",
+      "group": "keys",
+      "value": 132,
+      "source": "FillMatrix 0x40d300 (0x84 dwords)"
+    },
+    {
+      "name": "fn slots",
+      "group": "keys",
+      "value": 48,
+      "source": "FillMatrix 0x40d300 (0x60 dwords = 2 x 48)"
+    },
+    {
+      "name": "fn key code",
+      "group": "keys",
+      "value": "20 00 00 00",
+      "source": "function 0x40cc8f"
+    },
+    {
+      "name": "fn pointer type",
+      "group": "keys",
+      "value": 2,
+      "source": "function 0x40d3de"
+    },
+    {
+      "name": "modifier-only type",
+      "group": "keys",
+      "value": 6,
+      "source": "function 0x40ccbe"
+    },
+    {
+      "name": "mouse type",
+      "group": "keys",
+      "value": 7,
+      "source": "function 0x40cc0f"
+    },
+    {
+      "name": "media type",
+      "group": "keys",
+      "value": 4,
+      "source": "function 0x40cf53"
+    },
+    {
+      "name": "disabled key code",
+      "group": "keys",
+      "value": "00 00 00 00",
+      "estimated": true
+    },
+    {
+      "name": "mouse button order",
+      "group": "keys",
+      "value": "names in USB button order: left F0, right F1, middle F2, back F3, forward F4, wheel up F7, wheel down F8",
+      "estimated": true
+    },
+    {
+      "name": "game mode flag offset",
+      "group": "lighting",
+      "value": 4,
+      "source": "LedModeSelectOffset default at 0x43b49c, used at 0x40dadc"
+    },
+    {
+      "name": "effect offset",
+      "group": "lighting",
+      "value": 5,
+      "source": "function 0x40daf5"
+    },
+    {
+      "name": "group offset",
+      "group": "lighting",
+      "value": 6,
+      "source": "function 0x40db14"
+    },
+    {
+      "name": "game group base",
+      "group": "lighting",
+      "value": 32,
+      "source": "StartGp default 0x20 at 0x43b3bb"
+    },
+    {
+      "name": "effect parameter offset",
+      "group": "lighting",
+      "value": 18,
+      "source": "EffectOffset default 0x12 at 0x43b4b2"
+    },
+    {
+      "name": "colourful colour value",
+      "group": "lighting",
+      "value": 7,
+      "source": "function 0x40db5c"
+    },
+    {
+      "name": "direction value",
+      "group": "lighting",
+      "value": 8,
+      "source": "Direct1=10,8,0 and function 0x40db80"
+    },
+    {
+      "name": "profile signature",
+      "group": "lighting",
+      "value": "5A A5",
+      "source": "function 0x40dbfa"
+    },
+    {
+      "name": "speed levels",
+      "group": "lighting",
+      "value": 5,
+      "source": "Cfg.ini SpeedNum"
+    },
+    {
+      "name": "brightness levels",
+      "group": "lighting",
+      "value": 5,
+      "source": "Cfg.ini BriNum"
+    },
+    {
+      "name": "brightness scale",
+      "group": "lighting",
+      "value": "5,25,50,75,100",
+      "unit": "%",
+      "source": "Cfg.ini BriScale"
+    },
+    {
+      "name": "default effect parameters",
+      "group": "lighting",
+      "value": "07,44 (06,44 for Always on)",
+      "source": "Cfg.ini LEDParam, read at 0x43b25d"
+    },
+    {
+      "name": "effect count",
+      "group": "lighting",
+      "value": 16,
+      "source": "text.xml tc_led_mode1..16"
+    },
+    {
+      "name": "basic colour order",
+      "group": "lighting",
+      "value": "red, blue, green, yellow, purple, cyan, white",
+      "source": "colour button table in function 0x4168e0 (Ghidra FUN_004168e0)"
+    },
+    {
+      "name": "speed nibble",
+      "group": "lighting",
+      "value": "high nibble = speed level - 1",
+      "source": "functions 0x40dac0, 0x43c970, 0x417c50"
+    },
+    {
+      "name": "brightness nibble",
+      "group": "lighting",
+      "value": "low nibble = brightness level - 1",
+      "source": "functions 0x40dac0, 0x43c970, 0x417c50"
+    },
+    {
+      "name": "media codes",
+      "group": "keys",
+      "value": "183,CD,B7,B6,B5,E9,EA,E2,18A,192,194,221,223,224,225,226,227,22A",
+      "source": "function 0x40cbe0, table 0x40d294"
+    },
+    {
+      "name": "mouse button codes",
+      "group": "keys",
+      "value": "F0,F1,F2,F3,F4,F7,F8",
+      "source": "function 0x40cbe0, jump table 0x40d01c"
+    },
+    {
+      "name": "layout",
+      "group": "device",
+      "value": "UK ISO",
+      "source": "Cfg.ini [KEY] (ISO Enter, extra key K88 by left Shift); confirmed by the person"
+    },
+    {
+      "name": "fastest speed level",
+      "group": "lighting",
+      "value": 5,
+      "estimated": true
+    },
+    {
+      "name": "wait after unlock",
+      "group": "timing",
+      "value": 20,
+      "unit": "ms",
+      "source": "0x40dd41"
+    },
+    {
+      "name": "wait after reading settings",
+      "group": "timing",
+      "value": 30,
+      "unit": "ms",
+      "source": "0x40ddd4"
+    },
+    {
+      "name": "wait after first settings write",
+      "group": "timing",
+      "value": 90,
+      "unit": "ms",
+      "source": "0x40dded"
+    },
+    {
+      "name": "wait after key table",
+      "group": "timing",
+      "value": 30,
+      "unit": "ms",
+      "source": "0x40e6d4"
+    },
+    {
+      "name": "macros",
+      "group": "scope",
+      "value": "not in this version",
+      "estimated": true
+    },
+    {
+      "name": "usb ids",
+      "group": "mouse",
+      "value": "373E:0046 cable, 373E:0047 receiver",
+      "source": "env-models.json PIDWired/PIDWireless"
+    },
+    {
+      "name": "hid collection",
+      "group": "mouse",
+      "value": "usage page 0xFFFF usage 0, 64-byte feature report 0",
+      "source": "vendor sendFeatureReport; Shark Deck mouse-jxc.md"
+    },
+    {
+      "name": "dpi range",
+      "group": "mouse",
+      "value": "100-42000 step 50, 6 stages",
+      "source": "env-models.json DPIMax, DPIMaxStageNum"
+    },
+    {
+      "name": "dpi write length tag",
+      "group": "mouse",
+      "value": "0x1A",
+      "source": "vendor setDPIStageInfo"
+    },
+    {
+      "name": "poll codes",
+      "group": "mouse",
+      "value": "125=08,250=04,500=02,1000=01,2000=20,4000=40,8000=80",
+      "source": "Shark Deck mouse-jxc.md; vendor 0x10->1000 quirk"
+    },
+    {
+      "name": "lift-off codes",
+      "group": "mouse",
+      "value": "0.7mm=0x87,1mm=01,2mm=02",
+      "source": "vendor setLOD"
+    },
+    {
+      "name": "debounce range",
+      "group": "mouse",
+      "value": "0-20 ms",
+      "source": "Shark Deck mouse-jxc.md"
+    },
+    {
+      "name": "sleep options",
+      "group": "mouse",
+      "value": "15s,1min,3min,5min,10min,30min (seconds on the wire)",
+      "source": "env-models.json SleepTimeGrade; Shark Deck mouse-jxc.md"
+    },
+    {
+      "name": "profiles",
+      "group": "mouse",
+      "value": "3",
+      "source": "Shark Deck jxc-mice.ts; vendor getProfileID"
+    }
+  ]
+}
