@@ -39,3 +39,15 @@ driver to `src/drivers/mod.rs`.
   [Shark Deck](https://github.com/alexandrewillame/shark-deck) (no code from either is included).
 - Not affiliated with CIY or Attack Shark. Use at your own risk: settings are written to the
   device's own memory.
+
+## Releases
+
+Every push to `main` is built by GitHub Actions. To publish a release, bump `version` in
+`Cargo.toml`, commit, then push a matching tag:
+
+```
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The Release workflow builds `openperiph.exe` and attaches it (plus a zip) to a new GitHub release.

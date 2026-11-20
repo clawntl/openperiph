@@ -1,0 +1,50 @@
+name: Release
+
+# Push a tag like v0.1.0 to build the app and publish a GitHub release with it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check tag matches Cargo.toml version
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            throw "Tag ${{ github.ref_name }} does not match Cargo.toml version $version"
+          }
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "openperiph-${{ github.ref_name }}-windows-x64"
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item target/release/openperiph.exe, README.md, MECHANICS.md $name
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "openperiph-${{ github.ref_name }}-windows-x64.zip" `
+            "target/release/openperiph.exe" `
+            --title "OpenPeriph ${{ github.ref_name }}" `
+            --generate-notes
