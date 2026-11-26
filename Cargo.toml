@@ -1,15 +1,21 @@
 [package]
 name = "openperiph"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Open settings app for PC peripherals (CIY X78 keyboard, Attack Shark R5 ULTRA mouse) without the vendor software"
+description = "Open settings app for PC peripherals (QMK/VIA keyboards, CIY X78 keyboard, Attack Shark R5 ULTRA mouse) without the vendor software, for Windows and Linux"
 
 [dependencies]
 eframe = "0.37.0"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Devices_HumanInterfaceDevice", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Storage_FileSystem", "Win32_Security"] }
+rfd = "0.15"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Devices_HumanInterfaceDevice", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_IO", "Win32_System_Threading"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 
 [profile.release]
 opt-level = 3

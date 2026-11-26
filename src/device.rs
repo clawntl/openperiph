@@ -30,9 +30,9 @@ impl DeviceKind {
 #[derive(Clone, Debug)]
 pub struct DeviceInfo {
     /// Stable id, used for the saved-settings file name.
-    pub id: &'static str,
-    pub name: &'static str,
-    pub maker: &'static str,
+    pub id: String,
+    pub name: String,
+    pub maker: String,
     pub kind: DeviceKind,
     pub vendor_id: u16,
     pub product_id: u16,
@@ -46,6 +46,8 @@ pub struct Capabilities {
     pub lighting: bool,
     /// DPI, polling rate, sensor and power settings.
     pub mouse: bool,
+    /// A QMK keyboard with VIA: keymap, macros, lighting menus and settings pages of its own.
+    pub qmk: bool,
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -175,6 +177,14 @@ pub trait Driver: Send + Sync {
     fn capabilities(&self) -> Capabilities;
     /// Whether the device is plugged in.
     fn detect(&self) -> bool;
+    /// USB vendor and product ids the device may show up as (for Linux permissions).
+    fn usb_ids(&self) -> Vec<(u16, u16)> {
+        vec![(self.info().vendor_id, self.info().product_id)]
+    }
+    /// The QMK side of the device, for QMK keyboards.
+    fn as_qmk(&self) -> Option<&crate::drivers::qmk::QmkDriver> {
+        None
+    }
 
     // — keyboards ---------------------------------------------------------------------------
     fn layout(&self) -> &KeyboardLayout {

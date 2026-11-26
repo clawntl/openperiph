@@ -1,5 +1,8 @@
 //! The window: a device list on the left, and for the chosen device a "Keys" page (click a key,
-//! pick what it does) and a "Lighting" page (effect, colour, speed, brightness).
+//! pick what it does) and a "Lighting" page (effect, colour, speed, brightness). QMK keyboards
+//! get their own pages (keymap, lighting, macros, settings) from `qmk_ui`.
+
+mod qmk_ui;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -15,7 +18,7 @@ use crate::device::{DeviceKind, Driver, EffectSettings, KeySettings, LightingSta
 use crate::keycodes::{
     KeyAction, MouseAction, KEY_GROUPS, MEDIA, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN,
 };
-use crate::{drivers, store};
+use crate::{drivers, hid, qmk, store};
 
 const ACCENT: Color32 = Color32::from_rgb(46, 196, 214);
 const BG: Color32 = Color32::from_rgb(20, 22, 27);
@@ -31,6 +34,8 @@ enum Tab {
     Keys,
     Lighting,
     Mouse,
+    Macros,
+    Settings,
 }
 
 /// The kinds of function offered in the key editor.
@@ -76,7 +81,12 @@ impl Kind {
 }
 
 enum Msg {
-    Detected(usize, bool),
+    /// Device index, plugged in, needs permission (Linux).
+    Detected(usize, bool, bool),
+    /// QMK keyboards found on the system.
+    Discovered(Vec<hid::Collection>),
+    Qmk(usize, qmk::Event),
+    Access(Result<(), String>),
     Lighting(usize, Result<LightingState, String>),
     /// A mouse profile read; `true` when it replaces unsent edits (the person picked another profile).
     MouseRead(usize, Result<(MouseState, MouseStatus), String>, bool),
@@ -95,9 +105,33 @@ struct DeviceEntry {
     mouse_status: MouseStatus,
     mouse_dirty: bool,
     read_once: bool,
+    /// Plugged in, but this user may not open it yet (Linux, no udev rule).
+    needs_access: bool,
+    qmk: Option<qmk_ui::QmkState>,
 }
 
 impl DeviceEntry {
+    fn new(driver: Arc<dyn Driver>) -> DeviceEntry {
+        let saved = store::load(&driver.info().id);
+        let lighting = saved.lighting.clone().unwrap_or_else(|| driver.default_lighting());
+        let mouse = saved.mouse.clone().or_else(|| driver.default_mouse());
+        let qmk = driver.capabilities().qmk.then(qmk_ui::QmkState::default);
+        DeviceEntry {
+            driver,
+            connected: None,
+            keys: saved.keys,
+            lighting,
+            keys_dirty: false,
+            lighting_dirty: false,
+            mouse,
+            mouse_status: MouseStatus::default(),
+            mouse_dirty: false,
+            read_once: false,
+            needs_access: false,
+            qmk,
+        }
+    }
+
     fn dirty(&self) -> bool {
         self.keys_dirty || self.lighting_dirty || self.mouse_dirty
     }
@@ -121,41 +155,30 @@ pub struct OpenPeriphApp {
     screenshot: Option<PathBuf>,
     frames: u32,
     screenshot_sent: bool,
+    discovering: bool,
 }
 
 impl OpenPeriphApp {
     /// `page` (a hidden option for checks): "lighting", or "mouse" to open the first mouse.
-    pub fn new(cc: &eframe::CreationContext<'_>, screenshot: Option<PathBuf>, page: Option<String>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, screenshot: Option<PathBuf>, page: Option<String>, demo: bool) -> Self {
         style(&cc.egui_ctx);
         let (tx, rx) = channel();
-        let devices: Vec<DeviceEntry> = drivers::all()
-            .into_iter()
-            .map(|driver| {
-                let saved = store::load(driver.info().id);
-                let lighting = saved.lighting.clone().unwrap_or_else(|| driver.default_lighting());
-                let mouse = saved.mouse.clone().or_else(|| driver.default_mouse());
-                DeviceEntry {
-                    driver,
-                    connected: None,
-                    keys: saved.keys,
-                    lighting,
-                    keys_dirty: false,
-                    lighting_dirty: false,
-                    mouse,
-                    mouse_status: MouseStatus::default(),
-                    mouse_dirty: false,
-                    read_once: false,
-                }
-            })
-            .collect();
+        let mut devices: Vec<DeviceEntry> = drivers::all().into_iter().map(DeviceEntry::new).collect();
+        if demo {
+            devices.push(DeviceEntry::new(qmk_ui::demo_driver()));
+        }
         let page = page.unwrap_or_default().to_ascii_lowercase();
+        // With --demo, checks open on the simulated QMK keyboard.
+        let first = if demo { devices.len() - 1 } else { 0 };
         let (selected, tab) = match page.as_str() {
             "mouse" => (
                 devices.iter().position(|d| d.driver.capabilities().mouse).unwrap_or(0),
                 Tab::Mouse,
             ),
-            "lighting" => (0, Tab::Lighting),
-            _ => (0, Tab::Keys),
+            "lighting" => (first, Tab::Lighting),
+            "macros" => (first, Tab::Macros),
+            "settings" => (first, Tab::Settings),
+            _ => (first, Tab::Keys),
         };
         OpenPeriphApp {
             devices,
@@ -174,6 +197,7 @@ impl OpenPeriphApp {
             screenshot,
             frames: 0,
             screenshot_sent: false,
+            discovering: false,
         }
     }
 
@@ -184,12 +208,22 @@ impl OpenPeriphApp {
     fn poll(&mut self, ctx: &egui::Context) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                Msg::Detected(i, c) => {
+                Msg::Detected(i, c, access) => {
                     self.detecting = false;
                     let d = &mut self.devices[i];
                     let was = d.connected;
                     d.connected = Some(c);
-                    if c && !d.read_once && !self.screenshot.is_some() && !self.busy {
+                    d.needs_access = access;
+                    if d.qmk.is_some() {
+                        self.qmk_connection_changed(i, ctx);
+                        let d = &self.devices[i];
+                        if was == Some(true) && !c {
+                            let name = d.driver.info().name.clone();
+                            self.set_status(format!("{name} was unplugged."), false);
+                        }
+                        continue;
+                    }
+                    if c && !d.read_once && !self.screenshot.is_some() && !self.busy && !access {
                         d.read_once = true;
                         let driver = d.driver.clone();
                         let caps = driver.capabilities();
@@ -208,7 +242,7 @@ impl OpenPeriphApp {
                     if !c {
                         d.read_once = false;
                     }
-                    let name = d.driver.info().name;
+                    let name = d.driver.info().name.clone();
                     if was == Some(true) && !c {
                         self.set_status(format!("{name} was unplugged."), false);
                     }
@@ -219,7 +253,7 @@ impl OpenPeriphApp {
                         if !d.lighting_dirty {
                             d.lighting = l;
                         }
-                        let name = d.driver.info().name;
+                        let name = d.driver.info().name.clone();
                         self.set_status(format!("Read the current lighting from {name}."), true);
                     }
                     Err(e) => self.set_status(e, false),
@@ -232,12 +266,21 @@ impl OpenPeriphApp {
                             self.edit_stage = m.active_stage;
                             d.mouse = Some(m);
                         }
-                        let name = d.driver.info().name;
+                        let name = d.driver.info().name.clone();
                         self.set_status(format!("Read the current settings from {name}."), true);
                     }
                     Err(e) => self.set_status(e, false),
                 },
                 Msg::Progress(p) => self.status = p,
+                Msg::Discovered(found) => {
+                    self.discovering = false;
+                    self.add_discovered(found);
+                }
+                Msg::Qmk(i, e) => self.qmk_event(i, e),
+                Msg::Access(r) => match r {
+                    Ok(()) => self.set_status("Access granted. Unplug the device and plug it back in.".into(), true),
+                    Err(e) => self.set_status(e, false),
+                },
                 Msg::Applied(i, r) => {
                     self.busy = false;
                     match r {
@@ -269,7 +312,18 @@ impl OpenPeriphApp {
                 let tx = self.tx.clone();
                 let ctx = ctx.clone();
                 std::thread::spawn(move || {
-                    let _ = tx.send(Msg::Detected(i, driver.detect()));
+                    let found = driver.detect();
+                    let access = found && needs_access(&driver.usb_ids());
+                    let _ = tx.send(Msg::Detected(i, found, access));
+                    ctx.request_repaint();
+                });
+            }
+            if !self.discovering && !self.screenshot_mode() {
+                self.discovering = true;
+                let tx = self.tx.clone();
+                let ctx = ctx.clone();
+                std::thread::spawn(move || {
+                    let _ = tx.send(Msg::Discovered(qmk::scan()));
                     ctx.request_repaint();
                 });
             }
@@ -290,7 +344,7 @@ impl OpenPeriphApp {
             mouse: d.mouse.clone(),
         };
         if !self.screenshot_mode() {
-            let _ = store::save(d.driver.info().id, &saved);
+            let _ = store::save(&d.driver.info().id, &saved);
         }
     }
 
@@ -369,8 +423,13 @@ impl OpenPeriphApp {
                 _ => draw_keyboard_icon(p, Rect::from_center_size(icon_at, Vec2::new(30.0, 18.0))),
             }
             let info = d.driver.info();
-            p.text(Pos2::new(rect.min.x + 56.0, rect.min.y + 19.0), Align2::LEFT_CENTER, info.name, FontId::proportional(15.0), Color32::WHITE);
+            let mut name = info.name.clone();
+            if name.chars().count() > 22 {
+                name = name.chars().take(21).collect::<String>() + "…";
+            }
+            p.text(Pos2::new(rect.min.x + 56.0, rect.min.y + 19.0), Align2::LEFT_CENTER, name, FontId::proportional(15.0), Color32::WHITE);
             let (txt, col) = match d.connected {
+                Some(true) if d.needs_access => ("Needs access", Color32::from_rgb(240, 180, 60)),
                 Some(true) => ("Connected", GOOD),
                 Some(false) => ("Not connected", TEXT_DIM),
                 None => ("Looking…", TEXT_DIM),
@@ -404,6 +463,7 @@ impl OpenPeriphApp {
         let caps = d.driver.capabilities();
         let connected = d.connected == Some(true);
         let dirty = d.dirty();
+        let needs_access = d.needs_access;
         let battery = if caps.mouse && connected {
             d.mouse_status.battery.map(|b| (b, d.mouse_status.charging, d.mouse_status.wired))
         } else {
@@ -411,10 +471,36 @@ impl OpenPeriphApp {
         };
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                ui.label(RichText::new(info.name).size(26.0).strong().color(Color32::WHITE));
+                ui.label(RichText::new(&info.name).size(26.0).strong().color(Color32::WHITE));
                 ui.label(RichText::new(format!("{} {} · USB {:04X}:{:04X}", info.maker, info.kind.name().to_lowercase(), info.vendor_id, info.product_id)).color(TEXT_DIM));
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if needs_access {
+                    let btn = egui::Button::new(RichText::new("Allow access").size(15.0).strong().color(Color32::BLACK))
+                        .fill(ACCENT)
+                        .corner_radius(CornerRadius::same(10))
+                        .min_size(Vec2::new(160.0, 40.0));
+                    if ui.add(btn).on_hover_text("Adds a udev rule so you can use this device without root (asks for your password).").clicked() {
+                        let ids = self.devices[self.selected].driver.usb_ids();
+                        let tx = self.tx.clone();
+                        let ctx = ui.ctx().clone();
+                        std::thread::spawn(move || {
+                            let _ = tx.send(Msg::Access(hid::install_udev_rules(&ids)));
+                            ctx.request_repaint();
+                        });
+                    }
+                    ui.add_space(10.0);
+                    pill(ui, "Linux needs permission to use this device", Color32::from_rgb(240, 180, 60));
+                    return;
+                }
+                if caps.qmk {
+                    if connected {
+                        pill(ui, "Changes are saved on the keyboard as you make them", GOOD);
+                    } else {
+                        pill(ui, "Plug in the keyboard to change it", TEXT_DIM);
+                    }
+                    return;
+                }
                 let label = if self.busy { "Sending…" } else { "Apply to device" };
                 let enabled = connected && dirty && !self.busy;
                 let btn = egui::Button::new(RichText::new(label).size(15.0).strong().color(if enabled { Color32::BLACK } else { TEXT_DIM }))
@@ -445,6 +531,11 @@ impl OpenPeriphApp {
             });
         });
         ui.add_space(14.0);
+        if caps.qmk {
+            self.qmk_tabs(ui);
+            ui.add_space(12.0);
+            return;
+        }
         ui.horizontal(|ui| {
             if caps.key_remap && tab_button(ui, "Keys", self.tab == Tab::Keys) {
                 self.tab = Tab::Keys;
@@ -771,10 +862,15 @@ impl OpenPeriphApp {
     /// Keeps the open page one the selected device has.
     fn fix_tab(&mut self) {
         let caps = self.devices[self.selected].driver.capabilities();
+        if caps.qmk {
+            self.qmk_fix_tab();
+            return;
+        }
         let ok = match self.tab {
             Tab::Keys => caps.key_remap,
             Tab::Lighting => caps.lighting,
             Tab::Mouse => caps.mouse,
+            Tab::Macros | Tab::Settings => false,
         };
         if !ok {
             self.tab = if caps.key_remap {
@@ -996,10 +1092,13 @@ impl eframe::App for OpenPeriphApp {
             .show(ui, |ui| {
                 self.fix_tab();
                 self.header(ui);
-                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.tab {
-                    Tab::Keys => self.keys_page(ui),
-                    Tab::Lighting => self.lighting_page(ui),
-                    Tab::Mouse => self.mouse_page(ui),
+                let qmk = self.devices[self.selected].qmk.is_some();
+                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match (qmk, self.tab) {
+                    (true, tab) => self.qmk_page(ui, tab),
+                    (_, Tab::Keys) => self.keys_page(ui),
+                    (_, Tab::Lighting) => self.lighting_page(ui),
+                    (_, Tab::Mouse) => self.mouse_page(ui),
+                    _ => {}
                 });
             });
 
@@ -1015,6 +1114,11 @@ impl eframe::App for OpenPeriphApp {
             }
         }
     }
+}
+
+/// On Linux: a device of these ids is plugged in but its hidraw node can't be opened.
+fn needs_access(ids: &[(u16, u16)]) -> bool {
+    ids.iter().any(|&(v, p)| hid::collections(v, p).iter().any(hid::permission_problem))
 }
 
 fn save_png(path: &std::path::Path, image: &egui::ColorImage) -> bool {

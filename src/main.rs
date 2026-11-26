@@ -1,7 +1,8 @@
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 
-//! OpenPeriph: a simple settings app for PC devices. Supported: the CIY X78 keyboard (key
-//! remapping and lighting) and the Attack Shark R5 ULTRA mouse (DPI, polling, sensor, power).
+//! OpenPeriph: a simple settings app for PC devices, for Windows and Linux. Supported: any QMK
+//! keyboard with VIA (keymap, macros, lighting), the CIY X78 keyboard (key remapping and
+//! lighting) and the Attack Shark R5 ULTRA mouse (DPI, polling, sensor, power).
 //! See MECHANICS.md for how the app talks to each.
 
 mod app;
@@ -9,6 +10,7 @@ mod device;
 mod drivers;
 mod hid;
 mod keycodes;
+mod qmk;
 mod store;
 
 use std::path::PathBuf;
@@ -18,13 +20,20 @@ use eframe::egui;
 fn main() -> eframe::Result<()> {
     let mut args = std::env::args().skip(1);
     let mut screenshot: Option<PathBuf> = None;
-    // Hidden option for checks: --page lighting | mouse
+    // Hidden option for checks: --page lighting | mouse | macros | settings
     let mut page: Option<String> = None;
+    // --demo adds a simulated QMK keyboard (an SK620) to try the QMK pages without one.
+    let mut demo = false;
     while let Some(a) = args.next() {
         if a == "--screenshot" {
             screenshot = args.next().map(PathBuf::from);
         } else if a == "--page" {
             page = args.next();
+        } else if a == "--demo" {
+            demo = true;
+        } else if a == "--help" || a == "-h" {
+            println!("openperiph [--demo] [--screenshot FILE.png [--page keys|lighting|macros|settings|mouse]]");
+            return Ok(());
         }
     }
 
@@ -44,6 +53,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "OpenPeriph",
         options,
-        Box::new(move |cc| Ok(Box::new(app::OpenPeriphApp::new(cc, screenshot, page)))),
+        Box::new(move |cc| Ok(Box::new(app::OpenPeriphApp::new(cc, screenshot, page, demo)))),
     )
 }

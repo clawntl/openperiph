@@ -2,13 +2,23 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: openperiph-windows-x64
+            file: target/release/openperiph.exe
+          - os: ubuntu-latest
+            artifact: openperiph-linux-x64
+            file: target/release/openperiph
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
@@ -17,11 +27,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Test
+        run: cargo test --release --locked
+
       - name: Build
         run: cargo build --release --locked
 
       - name: Upload build
         uses: actions/upload-artifact@v7
         with:
-          name: openperiph-windows-x64
-          path: target/release/openperiph.exe
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.file }}

@@ -112,9 +112,9 @@ impl AttackSharkR5 {
     pub fn new() -> Self {
         AttackSharkR5 {
             info: DeviceInfo {
-                id: "attack-shark-r5-ultra",
-                name: "R5 ULTRA",
-                maker: "Attack Shark",
+                id: "attack-shark-r5-ultra".into(),
+                name: "R5 ULTRA".into(),
+                maker: "Attack Shark".into(),
                 kind: DeviceKind::Mouse,
                 vendor_id: VID,
                 product_id: PID_RECEIVER,
@@ -245,13 +245,17 @@ impl Driver for AttackSharkR5 {
     }
 
     fn capabilities(&self) -> Capabilities {
-        Capabilities { key_remap: false, fn_layer: false, lighting: false, mouse: true }
+        Capabilities { key_remap: false, fn_layer: false, lighting: false, mouse: true, qmk: false }
     }
 
     fn detect(&self) -> bool {
         [PID_CABLE, PID_RECEIVER]
             .iter()
             .any(|pid| hid::collections(VID, *pid).iter().any(|c| c.usage_page == USAGE_PAGE && c.usage == USAGE))
+    }
+
+    fn usb_ids(&self) -> Vec<(u16, u16)> {
+        vec![(VID, PID_CABLE), (VID, PID_RECEIVER)]
     }
 
     fn mouse_spec(&self, wired: bool) -> Option<MouseSpec> {

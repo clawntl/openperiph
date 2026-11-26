@@ -69,9 +69,9 @@ impl CiyX78 {
             .collect();
         CiyX78 {
             info: DeviceInfo {
-                id: "ciy-x78",
-                name: "CIY X78",
-                maker: "CIY",
+                id: "ciy-x78".into(),
+                name: "CIY X78".into(),
+                maker: "CIY".into(),
                 kind: DeviceKind::Keyboard,
                 vendor_id: VID,
                 product_id: PID,
@@ -338,7 +338,7 @@ impl Driver for CiyX78 {
     }
 
     fn capabilities(&self) -> Capabilities {
-        Capabilities { key_remap: true, fn_layer: true, lighting: true, mouse: false }
+        Capabilities { key_remap: true, fn_layer: true, lighting: true, mouse: false, qmk: false }
     }
 
     fn layout(&self) -> &KeyboardLayout {
