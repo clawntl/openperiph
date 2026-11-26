@@ -363,6 +363,28 @@ pub fn parse(s: &str, custom: &[CustomKeycode]) -> Option<u16> {
 // ---------------------------------------------------------------------------------------------
 // Key-cap text
 
+/// QMK and VIA write American English; the app shows British spellings.
+pub fn british(s: &str) -> String {
+    let mut out = s.to_string();
+    for (us, uk) in [
+        ("Colors", "Colours"),
+        ("colors", "colours"),
+        ("Color", "Colour"),
+        ("color", "colour"),
+        ("COLOR", "COLOUR"),
+        ("Favorites", "Favourites"),
+        ("favorites", "favourites"),
+        ("Favorite", "Favourite"),
+        ("Center", "Centre"),
+        ("center", "centre"),
+        ("Gray", "Grey"),
+        ("gray", "grey"),
+    ] {
+        out = out.replace(us, uk);
+    }
+    out
+}
+
 /// Friendly text for keycodes QMK gives no label to.
 const FRIENDLY: &[(&str, &str)] = &[
     ("KC_NO", ""),
@@ -446,15 +468,15 @@ fn single_label(code: u16, custom: &[CustomKeycode]) -> String {
             return f.to_string();
         }
         if !k.label.is_empty() {
-            return k.label.to_string();
+            return british(k.label);
         }
         let s = k.short;
         for (p, w) in [("UG_", "Glow "), ("BL_", "Light "), ("LM_", "LED "), ("MC_", "M")] {
             if let Some(rest) = s.strip_prefix(p) {
-                return format!("{w}{}", words_from_name(rest));
+                return british(&format!("{w}{}", words_from_name(rest)));
             }
         }
-        return words_from_name(s);
+        return british(&words_from_name(s));
     }
     name(code)
 }

@@ -161,7 +161,7 @@ fn parse_control(v: &Value) -> Option<Control> {
     let key = content.first()?.as_str()?.to_string();
     let channel = content.get(1)?.as_u64()? as u8;
     let id = content.get(2)?.as_u64()? as u8;
-    let label = v["label"].as_str().unwrap_or("").to_string();
+    let label = super::keycodes::british(v["label"].as_str().unwrap_or(""));
     let opts = &v["options"];
     let kind = match v["type"].as_str()? {
         "range" => {
@@ -177,8 +177,8 @@ fn parse_control(v: &Value) -> Option<Control> {
                     .iter()
                     .enumerate()
                     .filter_map(|(i, o)| match o {
-                        Value::String(s) => Some((s.clone(), i as i64)),
-                        Value::Array(a) => Some((a.first()?.as_str()?.to_string(), a.get(1)?.as_i64()?)),
+                        Value::String(s) => Some((super::keycodes::british(s), i as i64)),
+                        Value::Array(a) => Some((super::keycodes::british(a.first()?.as_str()?), a.get(1)?.as_i64()?)),
                         _ => None,
                     })
                     .collect(),
@@ -207,8 +207,8 @@ fn collect(content: &Value, label: &str, out: &mut Vec<Section>) {
                 here.controls.push(c);
             }
         } else if it.get("content").is_some() {
-            let l = it["label"].as_str().unwrap_or(label);
-            collect(&it["content"], l, out);
+            let l = super::keycodes::british(it["label"].as_str().unwrap_or(label));
+            collect(&it["content"], &l, out);
         }
     }
     if !here.controls.is_empty() {
@@ -227,7 +227,7 @@ pub fn parse_menus(menus: &[Value]) -> Vec<Menu> {
             },
             other => other.clone(),
         };
-        let label = v["label"].as_str().unwrap_or("Settings").to_string();
+        let label = super::keycodes::british(v["label"].as_str().unwrap_or("Settings"));
         let mut sections = Vec::new();
         collect(&v["content"], &label, &mut sections);
         if sections.is_empty() {
@@ -412,7 +412,7 @@ mod tests {
         assert_eq!(m[0].label, "Lighting");
         let effect = &m[0].sections[0].controls[1];
         let ControlKind::Dropdown(opts) = &effect.kind else { panic!() };
-        assert_eq!(opts[1], ("Solid color".to_string(), 1));
+        assert_eq!(opts[1], ("Solid colour".to_string(), 1));
         assert!(opts.len() > 20);
     }
 }

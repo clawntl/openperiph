@@ -63,6 +63,7 @@ pub struct Release {
     pub download_url: String,
     pub sha256: Option<String>,
     pub page_url: String,
+    pub notes: String,
 }
 
 /// The newest release that has the firmware file.
@@ -70,7 +71,7 @@ pub fn latest(src: &Source) -> Result<Release, String> {
     let r = crate::net::latest_release(src.repo).map_err(|e| format!("Couldn't check for firmware updates: {e}"))?;
     let version = parse_version(&r.tag).ok_or_else(|| format!("The latest release, {}, has no version number.", r.tag))?;
     let a = r.assets.iter().find(|a| a.name == src.asset).ok_or_else(|| format!("Release {} has no {}.", r.tag, src.asset))?;
-    Ok(Release { tag: r.tag.clone(), version, download_url: a.url.clone(), sha256: a.sha256.clone(), page_url: r.page_url })
+    Ok(Release { tag: r.tag.clone(), version, download_url: a.url.clone(), sha256: a.sha256.clone(), page_url: r.page_url, notes: r.body })
 }
 
 pub fn download(r: &Release) -> Result<Vec<u8>, String> {

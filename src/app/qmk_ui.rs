@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Rect, RichText, Sense, Stroke, StrokeKind, Ui, Vec2};
+use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use super::{card, pill, segment, tab_button, toggle, DeviceEntry, Msg, OpenPeriphApp, Tab, ACCENT, BAD, CARD, KEYCAP, TEXT_DIM};
 use crate::device::Driver;
@@ -92,6 +92,10 @@ pub enum FwMsg {
 }
 
 impl QmkState {
+    pub fn fw_progress(&self) -> Option<(String, f32)> {
+        self.fw_busy.clone()
+    }
+
     pub fn flashing(&self) -> bool {
         self.fw_busy.is_some()
     }
@@ -101,6 +105,18 @@ impl QmkState {
         let installed = self.snap.as_ref()?.firmware.unwrap_or(0);
         match &self.fw_release {
             Some(Ok(r)) if r.version > installed && self.fw_busy.is_none() => Some(r.tag.clone()),
+            _ => None,
+        }
+    }
+
+    /// Latest tag, installed version and release notes, when an update is available.
+    pub fn release_summary(&self) -> Option<(String, String, String)> {
+        let installed = self.snap.as_ref()?.firmware.unwrap_or(0);
+        match &self.fw_release {
+            Some(Ok(r)) if r.version > installed => {
+                let have = if installed > 0 { firmware::version_text(installed) } else { "v1.0.0 or older".into() };
+                Some((r.tag.clone(), have, r.notes.clone()))
+            }
             _ => None,
         }
     }
@@ -183,6 +199,13 @@ impl OpenPeriphApp {
                 if self.screenshot.is_some() && q.key.is_none() {
                     q.key = Some((2, 1));
                 }
+                if self.page == "colour" {
+                    // checks: an effect that uses the colour (RGB Matrix "Solid colour")
+                    if let Some(s) = q.snap.as_mut() {
+                        s.values.insert((3, 2), vec![1]);
+                        s.values.insert((3, 4), vec![150, 200]);
+                    }
+                }
                 if let Some((b, old_defaults)) = q.pending_restore.take() {
                     let def = qmk_driver(&self.devices[i]).and_then(|d| d.definition());
                     let q = self.devices[i].qmk.as_mut().unwrap();
@@ -251,7 +274,17 @@ impl OpenPeriphApp {
                 download_url: String::new(),
                 sha256: None,
                 page_url: format!("https://github.com/{}/releases", src.repo),
+                notes: "## Changes in 1.0.1\n- Fn+. is volume down and Fn+? volume up (Fn+, stays mute).\n- Caps Lock lights the Caps Lock key.\n- OpenPeriph can see the firmware version.".into(),
             }));
+            match self.page.as_str() {
+                "fw-update" => self.fw_popup = Some(i),
+                "flashing" => {
+                    if let Some(q) = self.devices[i].qmk.as_mut() {
+                        q.fw_busy = Some(("Writing the firmware".into(), 0.42));
+                    }
+                }
+                _ => {}
+            }
             return;
         }
         q.fw_checking = true;
@@ -262,6 +295,7 @@ impl OpenPeriphApp {
     }
 
     pub(super) fn firmware_msg(&mut self, i: usize, m: FwMsg) {
+        let name = self.devices[i].driver.info().name.clone();
         let Some(q) = self.devices[i].qmk.as_mut() else { return };
         match m {
             FwMsg::Latest(r) => {
@@ -269,9 +303,12 @@ impl OpenPeriphApp {
                 let installed = q.snap.as_ref().and_then(|s| s.firmware).unwrap_or(0);
                 if let Ok(rel) = &r {
                     if rel.version > installed {
-                        let text = format!("Firmware {} is available: Settings, Firmware.", rel.tag);
+                        let text = format!("Firmware {} is available for your {}.", rel.tag, name);
                         q.fw_release = Some(r);
                         self.set_status(text, true);
+                        if self.fw_popup.is_none() {
+                            self.fw_popup = Some(i);
+                        }
                         return;
                     }
                 }
@@ -301,6 +338,16 @@ impl OpenPeriphApp {
                 }
             }
         }
+    }
+
+    /// "Update now" from the popup.
+    pub(super) fn firmware_update_now(&mut self, i: usize) {
+        let demo = qmk_driver(&self.devices[i]).is_some_and(|d| d.demo);
+        if demo || self.screenshot_mode() {
+            self.set_status("The simulated keyboard can't be updated.".into(), false);
+            return;
+        }
+        self.start_update(i, None);
     }
 
     /// Starts an update from a release (`None` path) or a .bin file.
@@ -395,8 +442,9 @@ impl OpenPeriphApp {
                 ui.label(RichText::new(format!("From github.com/{}. The keyboard restarts into its bootloader, is written and checked, then restarts.", src.repo)).size(12.0).color(TEXT_DIM));
                 ui.add_space(4.0);
                 if let Some((stage, f)) = &q.fw_busy {
-                    ui.add(egui::ProgressBar::new(*f).text(stage.as_str()).desired_width(ui.available_width()));
-                    ui.label(RichText::new("Don't unplug the keyboard.").color(TEXT_DIM));
+                    super::progress_bar(ui, *f, stage);
+                    ui.add_space(2.0);
+                    ui.label(RichText::new("Don't unplug the keyboard.").strong().color(super::WARN));
                     return;
                 }
                 let mut keep = !q.fw_discard;
@@ -945,9 +993,31 @@ impl OpenPeriphApp {
                     let title = if sec.label == m.label { m.label.clone() } else { format!("{} · {}", m.label, sec.label) };
                     ui.label(RichText::new(title).size(16.0).strong().color(Color32::WHITE));
                     ui.add_space(6.0);
-                    for c in &sec.controls {
+                    // Sliders and the colour first; long effect lists last.
+                    let mut order: Vec<&Control> = sec.controls.iter().collect();
+                    order.sort_by_key(|c| matches!(&c.kind, ControlKind::Dropdown(o) if o.len() > 6));
+                    for c in order {
                         if let Some(expr) = &c.show_if {
                             if !menus::show_if(expr, &named) {
+                                if matches!(c.kind, ControlKind::Color) {
+                                    // Say why there's no colour, and offer an effect that uses one.
+                                    let solid = sec.controls.iter().find_map(|e| match &e.kind {
+                                        ControlKind::Dropdown(o) => o.iter().find(|(l, _)| l.to_lowercase().starts_with("solid")).map(|(l, v)| (e, l.clone(), *v)),
+                                        _ => None,
+                                    });
+                                    ui.label(RichText::new(&c.label).color(TEXT_DIM));
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(RichText::new("This effect makes its own colours, so there's no colour to pick.").color(Color32::WHITE));
+                                        if let Some((e, label, v)) = solid {
+                                            if ui.button(format!("Switch to {label}")).clicked() {
+                                                let new = e.bytes(v);
+                                                snap.values.insert((e.channel, e.id), new.clone());
+                                                changes.push((e.channel, e.id, new));
+                                            }
+                                        }
+                                    });
+                                    ui.add_space(8.0);
+                                }
                                 continue;
                             }
                         }
@@ -1363,33 +1433,11 @@ fn control(ui: &mut Ui, c: &Control, cur: &[u8]) -> Option<Vec<u8>> {
             }
         }
         ControlKind::Color => {
-            let (mut h, mut s) = (cur.first().copied().unwrap_or(0), cur.get(1).copied().unwrap_or(255));
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&c.label).color(TEXT_DIM));
-                let (rect, _) = ui.allocate_exact_size(Vec2::new(28.0, 28.0), Sense::hover());
-                ui.painter().circle_filled(rect.center(), 12.0, hsv(h, s));
-            });
-            ui.horizontal(|ui| {
-                ui.label("Hue");
-                let a = ui.add(egui::Slider::new(&mut h, 0..=255).show_value(false)).changed();
-                ui.label("Saturation");
-                let b = ui.add(egui::Slider::new(&mut s, 0..=255).show_value(false)).changed();
-                if a || b {
-                    out = Some(vec![h, s]);
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                for (name, hh, ss) in [("Red", 0u8, 255u8), ("Orange", 21, 255), ("Yellow", 43, 255), ("Green", 85, 255), ("Cyan", 128, 255), ("Blue", 170, 255), ("Purple", 191, 255), ("Pink", 234, 200), ("White", 0, 0)] {
-                    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
-                    ui.painter().circle_filled(rect.center(), 10.0, hsv(hh, ss));
-                    if (h, s) == (hh, ss) {
-                        ui.painter().circle_stroke(rect.center(), 12.0, Stroke::new(2.0, Color32::WHITE));
-                    }
-                    if resp.on_hover_text(name).clicked() {
-                        out = Some(vec![hh, ss]);
-                    }
-                }
-            });
+            let (h, s) = (cur.first().copied().unwrap_or(0), cur.get(1).copied().unwrap_or(255));
+            ui.label(RichText::new(&c.label).color(TEXT_DIM));
+            if let Some((h, s)) = colour_picker(ui, egui::Id::unique(("colour", c.channel, c.id)), h, s) {
+                out = Some(vec![h, s]);
+            }
         }
         ControlKind::Keycode => {
             let v = c.number(cur) as u16;
@@ -1400,6 +1448,117 @@ fn control(ui: &mut Ui, c: &Control, cur: &[u8]) -> Option<Vec<u8>> {
         }
     }
     out
+}
+
+/// A hue × saturation area, a hex box and some presets. Brightness has its own slider.
+fn colour_picker(ui: &mut Ui, id: egui::Id, h: u8, s: u8) -> Option<(u8, u8)> {
+    let mut out = None;
+    ui.horizontal(|ui| {
+        // the area: hue left to right, saturation top (full) to bottom (white)
+        let size = Vec2::new((ui.available_width() - 190.0).clamp(220.0, 460.0), 150.0);
+        let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
+        let mut mesh = egui::Mesh::default();
+        const STEPS: usize = 24;
+        for i in 0..=STEPS {
+            let f = i as f32 / STEPS as f32;
+            let x = rect.min.x + f * rect.width();
+            let hue = (f * 255.0).round() as u8;
+            mesh.colored_vertex(Pos2::new(x, rect.min.y), hsv(hue, 255));
+            mesh.colored_vertex(Pos2::new(x, rect.max.y), Color32::WHITE);
+            if i > 0 {
+                let k = (i as u32) * 2;
+                mesh.add_triangle(k - 2, k - 1, k);
+                mesh.add_triangle(k - 1, k, k + 1);
+            }
+        }
+        let p = ui.painter_at(rect.expand(8.0));
+        p.add(egui::Shape::mesh(mesh));
+        p.rect_stroke(rect, CornerRadius::same(2), Stroke::new(1.0, Color32::from_gray(70)), StrokeKind::Outside);
+        let mark = Pos2::new(rect.min.x + h as f32 / 255.0 * rect.width(), rect.min.y + (1.0 - s as f32 / 255.0) * rect.height());
+        p.circle_filled(mark, 7.0, hsv(h, s));
+        p.circle_stroke(mark, 8.0, Stroke::new(2.0, Color32::WHITE));
+        p.circle_stroke(mark, 9.5, Stroke::new(1.0, Color32::BLACK));
+        if let Some(pos) = resp.interact_pointer_pos() {
+            if resp.dragged() || resp.clicked() {
+                let fx = ((pos.x - rect.min.x) / rect.width()).clamp(0.0, 1.0);
+                let fy = ((pos.y - rect.min.y) / rect.height()).clamp(0.0, 1.0);
+                let new = ((fx * 255.0).round() as u8, ((1.0 - fy) * 255.0).round() as u8);
+                if new != (h, s) {
+                    out = Some(new);
+                }
+            }
+        }
+        resp.on_hover_text("Click or drag to choose a colour");
+
+        ui.add_space(10.0);
+        ui.vertical(|ui| {
+            let now = out.unwrap_or((h, s));
+            let c = hsv(now.0, now.1);
+            let (sw, _) = ui.allocate_exact_size(Vec2::new(150.0, 44.0), Sense::hover());
+            ui.painter().rect_filled(sw, CornerRadius::same(8), c);
+            ui.painter().rect_stroke(sw, CornerRadius::same(8), Stroke::new(1.0, Color32::from_gray(80)), StrokeKind::Outside);
+            ui.add_space(4.0);
+            let hex = format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b());
+            let key = id.with("hex");
+            let mut text: String = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| hex.clone());
+            let edit = ui.add(egui::TextEdit::singleline(&mut text).desired_width(150.0).font(egui::TextStyle::Monospace).hint_text("#RRGGBB"));
+            if edit.changed() {
+                if let Some(hs) = parse_hex(&text) {
+                    out = Some(hs);
+                }
+            }
+            if edit.has_focus() {
+                ui.data_mut(|d| d.insert_temp(key, text));
+            } else {
+                ui.data_mut(|d| d.remove::<String>(key));
+            }
+            ui.label(RichText::new(format!("Hue {} · Saturation {}", now.0, now.1)).size(11.5).color(TEXT_DIM));
+            ui.label(RichText::new("Brightness has its own slider.").size(11.5).color(TEXT_DIM));
+        });
+    });
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        for (name, hh, ss) in [("Red", 0u8, 255u8), ("Orange", 21, 255), ("Yellow", 43, 255), ("Green", 85, 255), ("Cyan", 128, 255), ("Blue", 170, 255), ("Purple", 191, 255), ("Pink", 234, 200), ("White", 0, 0)] {
+            let (rect, resp) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
+            ui.painter().circle_filled(rect.center(), 10.0, hsv(hh, ss));
+            if (h, s) == (hh, ss) {
+                ui.painter().circle_stroke(rect.center(), 12.0, Stroke::new(2.0, Color32::WHITE));
+            }
+            if resp.on_hover_text(name).clicked() {
+                out = Some((hh, ss));
+            }
+        }
+    });
+    out
+}
+
+/// `#RRGGBB` (or `RGB`) as QMK hue and saturation; the brightness part is dropped.
+fn parse_hex(text: &str) -> Option<(u8, u8)> {
+    let t = text.trim().trim_start_matches('#');
+    let t: String = match t.len() {
+        3 => t.chars().flat_map(|c| [c, c]).collect(),
+        6 => t.to_string(),
+        _ => return None,
+    };
+    let v = u32::from_str_radix(&t, 16).ok()?;
+    let (r, g, b) = (((v >> 16) & 255) as f32 / 255.0, ((v >> 8) & 255) as f32 / 255.0, (v & 255) as f32 / 255.0);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    if max == 0.0 {
+        return Some((0, 0));
+    }
+    let d = max - min;
+    let sat = d / max;
+    let hue = if d == 0.0 {
+        0.0
+    } else if max == r {
+        ((g - b) / d).rem_euclid(6.0)
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    } / 6.0;
+    Some(((hue * 255.0).round() as u8, (sat * 255.0).round() as u8))
 }
 
 /// QMK's hue/saturation (0–255 each) at full brightness.
@@ -1426,5 +1585,23 @@ struct SharedFake(std::sync::Arc<std::sync::Mutex<qmk::via::FakeKeyboard>>);
 impl qmk::via::Transport for SharedFake {
     fn exchange(&mut self, m: &[u8; qmk::via::MSG_LEN]) -> Result<[u8; qmk::via::MSG_LEN], String> {
         self.0.lock().map_err(|_| "demo keyboard broke".to_string())?.exchange(m)
+    }
+}
+
+#[cfg(test)]
+mod colour_tests {
+    use super::{hsv, parse_hex};
+
+    #[test]
+    fn hex_round_trip() {
+        assert_eq!(parse_hex("#FF0000"), Some((0, 255)));
+        assert_eq!(parse_hex("00f"), Some((170, 255)));
+        assert_eq!(parse_hex("#ffffff"), Some((0, 0)));
+        assert_eq!(parse_hex("nope"), None);
+        for (h, s) in [(0u8, 255u8), (85, 255), (170, 128), (200, 40)] {
+            let c = hsv(h, s);
+            let (h2, s2) = parse_hex(&format!("{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())).unwrap();
+            assert!((h2 as i32 - h as i32).abs() <= 2 && (s2 as i32 - s as i32).abs() <= 2, "{h},{s} -> {h2},{s2}");
+        }
     }
 }

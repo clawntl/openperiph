@@ -16,6 +16,9 @@ directly: through Windows' own HID functions, or Linux's hidraw devices.
 How each device's messages work, and where every value came from, is written down in
 [MECHANICS.md](MECHANICS.md).
 
+Only devices that are plugged in are listed on the left. **About & supported devices** (bottom
+left) shows the version, updates and this list.
+
 QMK keyboards are changed the way VIA changes them: every edit is saved on the keyboard straight
 away, so there's no Apply button for them, and nothing has to stay running afterwards.
 
@@ -31,15 +34,15 @@ target\release\openperiph.exe      # Windows
 ```
 
 Options: `--demo` adds a simulated QMK keyboard (an SK620) to try the QMK pages without one.
-`--screenshot <file.png> [--page keys|lighting|macros|settings|mouse]` opens the window quietly,
+`--screenshot <file.png> [--page keys|lighting|colour|macros|settings|mouse|about|fw-update|app-update|flashing]` opens the window quietly,
 draws it, saves a picture and exits.
 
 ## Firmware updates (SK620)
 
 When the SK620 is connected, OpenPeriph asks GitHub for the newest
 [qmk-sk620 release](https://github.com/clawntl/qmk-sk620/releases) and compares it with the version
-the keyboard reports. If it's newer, a **Firmware … available** button appears; **Settings →
-Firmware → Update** downloads it, saves your keymap, macros and lighting, restarts the keyboard into
+the keyboard reports. If it's newer, a window asks whether to update now, showing the release notes
+(and a **Firmware … available** button stays at the top right). **Update** downloads it, saves your keymap, macros and lighting, restarts the keyboard into
 its bootloader, erases, writes and checks the firmware, restarts it and puts your settings back.
 Keys you never changed take the new firmware's defaults, so fixes to the default keymap come
 through. **Flash a file…** installs a `.bin` you choose instead.
@@ -51,7 +54,7 @@ After that, every update works from here.
 ## Updating OpenPeriph
 
 When it starts, OpenPeriph asks GitHub for its newest release. If there is a newer one, **Update
-OpenPeriph to …** appears at the bottom left. It downloads the release, checks it against the
+OpenPeriph to …** appears at the bottom left, and a window asks whether to update now. It downloads the release, checks it against the
 SHA-256 GitHub lists for the file, installs it and restarts:
 
 - Arch package: installs the new package with `pacman -U` (through `pkexec`, so it asks for your

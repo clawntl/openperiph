@@ -16,6 +16,8 @@ fn agent() -> ureq::Agent {
 pub struct GhRelease {
     pub tag: String,
     pub page_url: String,
+    /// The release notes (Markdown).
+    pub body: String,
     pub assets: Vec<GhAsset>,
 }
 
@@ -52,7 +54,12 @@ pub fn latest_release(repo: &str) -> Result<GhRelease, String> {
                 .collect()
         })
         .unwrap_or_default();
-    Ok(GhRelease { tag, page_url: v["html_url"].as_str().unwrap_or("").to_string(), assets })
+    Ok(GhRelease {
+        tag,
+        page_url: v["html_url"].as_str().unwrap_or("").to_string(),
+        body: v["body"].as_str().unwrap_or("").to_string(),
+        assets,
+    })
 }
 
 /// Downloads at most `max` bytes, reporting progress (0..1) when the size is known.

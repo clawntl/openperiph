@@ -174,6 +174,7 @@ mod tests {
         let r = GhRelease {
             tag: "v0.3.0".into(),
             page_url: String::new(),
+            body: String::new(),
             assets: names.iter().map(|n| GhAsset { name: n.to_string(), ..Default::default() }).collect(),
         };
         if cfg!(all(target_os = "linux", target_arch = "x86_64")) {

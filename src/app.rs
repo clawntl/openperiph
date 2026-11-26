@@ -29,6 +29,7 @@ const KEYCAP: Color32 = Color32::from_rgb(48, 53, 64);
 const TEXT_DIM: Color32 = Color32::from_rgb(150, 158, 172);
 const GOOD: Color32 = Color32::from_rgb(70, 200, 120);
 const BAD: Color32 = Color32::from_rgb(230, 90, 90);
+const WARN: Color32 = Color32::from_rgb(240, 180, 60);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -165,6 +166,14 @@ pub struct OpenPeriphApp {
     app_release: Option<Result<AppRelease, String>>,
     app_update: Option<(String, f32)>,
     install_kind: InstallKind,
+    /// The About page (version, updates, supported devices) instead of a device.
+    about: bool,
+    /// Ask about a new OpenPeriph release (once per run).
+    app_popup: bool,
+    /// Ask about new firmware for this device (once per run).
+    fw_popup: Option<usize>,
+    /// Hidden option for checks (`--page`).
+    page: String,
 }
 
 impl OpenPeriphApp {
@@ -184,11 +193,12 @@ impl OpenPeriphApp {
                 devices.iter().position(|d| d.driver.capabilities().mouse).unwrap_or(0),
                 Tab::Mouse,
             ),
-            "lighting" => (first, Tab::Lighting),
+            "lighting" | "colour" => (first, Tab::Lighting),
             "macros" => (first, Tab::Macros),
-            "settings" => (first, Tab::Settings),
+            "settings" | "update" | "flashing" => (first, Tab::Settings),
             _ => (first, Tab::Keys),
         };
+        let about = page == "about";
         OpenPeriphApp {
             devices,
             selected,
@@ -210,6 +220,10 @@ impl OpenPeriphApp {
             app_release: None,
             app_update: None,
             install_kind: selfupdate::install_kind(),
+            about,
+            app_popup: false,
+            fw_popup: None,
+            page,
         }
         .start_app_check(&cc.egui_ctx)
     }
@@ -220,6 +234,7 @@ impl OpenPeriphApp {
             // no network in checks: show what an available update looks like
             let release = crate::net::GhRelease { tag: "v9.9.9".into(), ..Default::default() };
             self.app_release = Some(Ok(AppRelease { release, version: 0x090909 }));
+            self.app_popup = self.page == "app-update";
             return self;
         }
         selfupdate::clean_up();
@@ -312,7 +327,8 @@ impl OpenPeriphApp {
                 Msg::AppLatest(r) => {
                     if let Ok(a) = &r {
                         if a.newer() {
-                            self.set_status(format!("OpenPeriph {} is available: see the bottom left.", a.release.tag), true);
+                            self.set_status(format!("OpenPeriph {} is available.", a.release.tag), true);
+                            self.app_popup = true;
                         }
                     }
                     self.app_release = Some(r);
@@ -446,10 +462,16 @@ impl OpenPeriphApp {
             ui.label(RichText::new("Settings for your PC devices").color(TEXT_DIM));
         });
         ui.add_space(22.0);
-        ui.label(RichText::new("DEVICES").size(11.0).color(TEXT_DIM));
+        ui.label(RichText::new("CONNECTED").size(11.0).color(TEXT_DIM));
         ui.add_space(6.0);
-        for i in 0..self.devices.len() {
-            let sel = i == self.selected;
+        let visible = self.visible_devices();
+        if visible.is_empty() {
+            ui.label(RichText::new("No supported devices are plugged in.").color(TEXT_DIM));
+            ui.add_space(4.0);
+            ui.label(RichText::new("See About for the list of supported devices.").size(12.0).color(TEXT_DIM));
+        }
+        for i in visible {
+            let sel = i == self.selected && !self.about;
             let d = &self.devices[i];
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 58.0), Sense::click());
             let fill = if sel {
@@ -479,11 +501,16 @@ impl OpenPeriphApp {
                 name = name.chars().take(21).collect::<String>() + "…";
             }
             p.text(Pos2::new(rect.min.x + 56.0, rect.min.y + 19.0), Align2::LEFT_CENTER, name, FontId::proportional(15.0), Color32::WHITE);
-            let (txt, col) = match d.connected {
-                Some(true) if d.needs_access => ("Needs access", Color32::from_rgb(240, 180, 60)),
-                Some(true) => ("Connected", GOOD),
-                Some(false) => ("Not connected", TEXT_DIM),
-                None => ("Looking…", TEXT_DIM),
+            let flashing = d.qmk.as_ref().is_some_and(|q| q.flashing());
+            let update = flashing || d.qmk.as_ref().and_then(|q| q.update_available()).is_some();
+            let (txt, col) = if d.needs_access {
+                ("Needs access", WARN)
+            } else if flashing {
+                ("Updating firmware…", ACCENT)
+            } else if update {
+                ("Firmware update", ACCENT)
+            } else {
+                ("Connected", GOOD)
             };
             p.circle_filled(Pos2::new(rect.min.x + 60.0, rect.min.y + 39.0), 3.5, col);
             p.text(
@@ -491,68 +518,226 @@ impl OpenPeriphApp {
                 Align2::LEFT_CENTER,
                 format!("{} · {}", info.kind.name(), txt),
                 FontId::proportional(12.0),
-                TEXT_DIM,
+                if update { ACCENT } else { TEXT_DIM },
             );
             if resp.clicked() {
                 self.selected = i;
+                self.about = false;
             }
             ui.add_space(4.0);
         }
         ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
             ui.add_space(14.0);
-            ui.label(
-                RichText::new(format!(
-                    "OpenPeriph v{} · {} device{}",
-                    env!("CARGO_PKG_VERSION"),
-                    self.devices.len(),
-                    if self.devices.len() == 1 { "" } else { "s" }
-                ))
-                .size(11.0)
-                .color(TEXT_DIM),
-            );
+            ui.label(RichText::new(format!("OpenPeriph v{}", env!("CARGO_PKG_VERSION"))).size(11.0).color(TEXT_DIM));
+            ui.add_space(2.0);
+            let about = egui::Button::new(RichText::new("About & supported devices").color(if self.about { Color32::BLACK } else { Color32::WHITE }))
+                .fill(if self.about { ACCENT } else { KEYCAP })
+                .corner_radius(CornerRadius::same(8))
+                .min_size(Vec2::new(ui.available_width(), 30.0));
+            if ui.add(about).clicked() {
+                self.about = true;
+            }
+            ui.add_space(4.0);
             self.app_update_box(ui);
         });
     }
 
+    /// Devices to list: the ones plugged in.
+    fn visible_devices(&self) -> Vec<usize> {
+        (0..self.devices.len()).filter(|&i| self.devices[i].connected == Some(true)).collect()
+    }
+
+    /// Starts updating OpenPeriph (or opens the release page when it can't update itself).
+    fn start_app_update(&mut self, ctx: &egui::Context) {
+        let Some(Ok(a)) = &self.app_release else { return };
+        let a = a.clone();
+        if self.install_kind == InstallKind::Manual {
+            ctx.open_url(egui::OpenUrl::new_tab(&a.release.page_url));
+            return;
+        }
+        self.app_update = Some(("Starting".into(), 0.0));
+        let kind = self.install_kind.clone();
+        let tx = self.tx.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let report = |stage: &str, f: f32| {
+                let _ = tx.send(Msg::AppProgress(stage.to_string(), f));
+                ctx.request_repaint();
+            };
+            let r = selfupdate::install(&a, &kind, &report);
+            let _ = tx.send(Msg::AppInstalled(r));
+            ctx.request_repaint();
+        });
+    }
+
+    fn app_update_hint(&self) -> &'static str {
+        match &self.install_kind {
+            InstallKind::Pacman => "Downloads the new Arch package and installs it with pacman (asks for your password), then restarts OpenPeriph.",
+            InstallKind::Replace(_) => "Downloads the new version, replaces this one and restarts OpenPeriph.",
+            InstallKind::Manual => "This copy can't be replaced from here, so this opens the release page.",
+        }
+    }
+
     /// "Update to vX" in the sidebar, or its progress.
     fn app_update_box(&mut self, ui: &mut Ui) {
-        if let Some((stage, f)) = &self.app_update {
-            ui.add(egui::ProgressBar::new(*f).text(stage.as_str()).desired_width(ui.available_width()));
+        if let Some((stage, f)) = self.app_update.clone() {
+            progress_bar(ui, f, &stage);
             return;
         }
         let Some(Ok(a)) = &self.app_release else { return };
         if !a.newer() {
             return;
         }
-        let a = a.clone();
+        let tag = a.release.tag.clone();
         let flashing = self.devices.iter().any(|d| d.qmk.as_ref().is_some_and(|q| q.flashing()));
         let manual = self.install_kind == InstallKind::Manual;
-        let text = if manual { format!("{} available: open the release", a.release.tag) } else { format!("Update OpenPeriph to {}", a.release.tag) };
-        let btn = egui::Button::new(RichText::new(text).color(Color32::BLACK)).fill(ACCENT).corner_radius(CornerRadius::same(8)).min_size(Vec2::new(ui.available_width(), 30.0));
-        let hint = match &self.install_kind {
-            InstallKind::Pacman => "Downloads the new Arch package and installs it with pacman (asks for your password), then restarts OpenPeriph.",
-            InstallKind::Replace(_) => "Downloads the new version, replaces this one and restarts OpenPeriph.",
-            InstallKind::Manual => "This copy can't be replaced from here; opens the release page.",
-        };
+        let text = if manual { format!("{tag} available: open the release") } else { format!("Update OpenPeriph to {tag}") };
+        let btn = egui::Button::new(RichText::new(text).strong().color(Color32::BLACK))
+            .fill(ACCENT)
+            .corner_radius(CornerRadius::same(8))
+            .min_size(Vec2::new(ui.available_width(), 32.0));
+        let hint = self.app_update_hint();
         if ui.add_enabled(!flashing && !self.screenshot_mode(), btn).on_hover_text(hint).clicked() {
-            if manual {
-                ui.ctx().open_url(egui::OpenUrl::new_tab(&a.release.page_url));
-                return;
-            }
-            self.app_update = Some(("Starting".into(), 0.0));
-            let kind = self.install_kind.clone();
-            let tx = self.tx.clone();
-            let ctx = ui.ctx().clone();
-            std::thread::spawn(move || {
-                let report = |stage: &str, f: f32| {
-                    let _ = tx.send(Msg::AppProgress(stage.to_string(), f));
-                    ctx.request_repaint();
-                };
-                let r = selfupdate::install(&a, &kind, &report);
-                let _ = tx.send(Msg::AppInstalled(r));
-                ctx.request_repaint();
-            });
+            self.start_app_update(ui.ctx());
         }
+    }
+
+    /// Popups offering updates (OpenPeriph first, then keyboard firmware).
+    fn update_popups(&mut self, ctx: &egui::Context) {
+        if self.app_popup {
+            let Some(Ok(a)) = self.app_release.clone() else {
+                self.app_popup = false;
+                return;
+            };
+            let mut close = false;
+            let mut update = false;
+            let resp = egui::Modal::new(egui::Id::unique("app-update")).show(ctx, |ui| {
+                ui.set_width(440.0);
+                ui.label(RichText::new(format!("OpenPeriph {} is available", a.release.tag)).size(18.0).strong().color(Color32::WHITE));
+                ui.label(RichText::new(format!("You have v{}.", env!("CARGO_PKG_VERSION"))).color(TEXT_DIM));
+                release_notes(ui, &a.release.body);
+                ui.label(RichText::new(self.app_update_hint()).size(12.0).color(TEXT_DIM));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    let label = if self.install_kind == InstallKind::Manual { "Open the release page" } else { "Update now" };
+                    if ui.add(primary_button(label)).clicked() {
+                        update = true;
+                    }
+                    if ui.button("Later").clicked() {
+                        close = true;
+                    }
+                });
+            });
+            if update {
+                self.app_popup = false;
+                self.start_app_update(ctx);
+            } else if close || resp.should_close() {
+                self.app_popup = false;
+            }
+            return;
+        }
+        let Some(i) = self.fw_popup else { return };
+        let info = self.devices[i].driver.info().clone();
+        let Some((tag, installed, notes)) = self.devices[i].qmk.as_ref().and_then(|q| q.release_summary()) else {
+            self.fw_popup = None;
+            return;
+        };
+        let mut close = false;
+        let mut update = false;
+        let resp = egui::Modal::new(egui::Id::unique("fw-update")).show(ctx, |ui| {
+            ui.set_width(440.0);
+            ui.label(RichText::new(format!("New firmware for your {}", info.name)).size(18.0).strong().color(Color32::WHITE));
+            ui.label(RichText::new(format!("{tag} is available; the keyboard has {installed}.")).color(TEXT_DIM));
+            release_notes(ui, &notes);
+            ui.label(
+                RichText::new("Updating takes about 20 seconds. Your keymap, macros and lighting are saved first and put back afterwards.")
+                    .size(12.0)
+                    .color(TEXT_DIM),
+            );
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.add(primary_button(&format!("Update to {tag}"))).clicked() {
+                    update = true;
+                }
+                if ui.button("Later").clicked() {
+                    close = true;
+                }
+            });
+        });
+        if update {
+            self.fw_popup = None;
+            self.selected = i;
+            self.about = false;
+            self.tab = Tab::Settings;
+            self.firmware_update_now(i);
+        } else if close || resp.should_close() {
+            self.fw_popup = None;
+        }
+    }
+
+    /// Version, updates and every supported device.
+    fn about_page(&mut self, ui: &mut Ui) {
+        ui.label(RichText::new("About OpenPeriph").size(26.0).strong().color(Color32::WHITE));
+        ui.label(RichText::new(format!("Version {} · settings for PC peripherals without the vendor software", env!("CARGO_PKG_VERSION"))).color(TEXT_DIM));
+        ui.add_space(14.0);
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            card(ui, |ui| {
+                ui.label(RichText::new("Updates").size(16.0).strong().color(Color32::WHITE));
+                match &self.app_release {
+                    Some(Ok(a)) if a.newer() => {
+                        ui.label(RichText::new(format!("{} is available.", a.release.tag)).color(ACCENT));
+                    }
+                    Some(Ok(_)) => {
+                        ui.label(RichText::new("You have the latest version.").color(GOOD));
+                    }
+                    Some(Err(e)) => {
+                        ui.label(RichText::new(format!("Couldn't check: {e}")).color(TEXT_DIM));
+                    }
+                    None => {
+                        ui.label(RichText::new("Checking…").color(TEXT_DIM));
+                    }
+                }
+                self.app_update_box(ui);
+                ui.hyperlink_to("github.com/clawntl/openperiph", "https://github.com/clawntl/openperiph");
+            });
+            ui.add_space(10.0);
+            card(ui, |ui| {
+                ui.label(RichText::new("Supported devices").size(16.0).strong().color(Color32::WHITE));
+                ui.label(RichText::new("Only devices that are plugged in are listed on the left.").color(TEXT_DIM));
+                ui.add_space(6.0);
+                egui::Grid::new("supported").num_columns(4).spacing([18.0, 8.0]).striped(true).show(ui, |ui| {
+                    for h in ["Device", "Type", "USB id", "Status"] {
+                        ui.label(RichText::new(h).size(12.0).color(TEXT_DIM));
+                    }
+                    ui.end_row();
+                    for d in &self.devices {
+                        let info = d.driver.info();
+                        let demo = d.driver.as_qmk().is_some_and(|q| q.demo);
+                        ui.label(RichText::new(format!("{}{}", info.name, if demo { " (simulated)" } else { "" })).color(Color32::WHITE));
+                        ui.label(if d.driver.capabilities().qmk { "Keyboard · QMK/VIA".to_string() } else { info.kind.name().to_string() });
+                        ui.label(format!("{:04X}:{:04X}", info.vendor_id, info.product_id));
+                        let (t, c) = match d.connected {
+                            Some(true) => ("Connected", GOOD),
+                            Some(false) => ("Not plugged in", TEXT_DIM),
+                            None => ("Looking…", TEXT_DIM),
+                        };
+                        ui.label(RichText::new(t).color(c));
+                        ui.end_row();
+                    }
+                    ui.label(RichText::new("Any other QMK keyboard with VIA").color(Color32::WHITE));
+                    ui.label("Keyboard · QMK/VIA");
+                    ui.label("any");
+                    ui.label(RichText::new("Found when plugged in").color(TEXT_DIM));
+                    ui.end_row();
+                });
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new("Other QMK keyboards need their VIA definition for the keymap page (import it on the keyboard's page); lighting and macros work without it.")
+                        .size(12.0)
+                        .color(TEXT_DIM),
+                );
+            });
+        });
     }
 
     fn header(&mut self, ui: &mut Ui) {
@@ -588,13 +773,13 @@ impl OpenPeriphApp {
                         });
                     }
                     ui.add_space(10.0);
-                    pill(ui, "Linux needs permission to use this device", Color32::from_rgb(240, 180, 60));
+                    pill(ui, "Linux needs permission to use this device", WARN);
                     return;
                 }
                 if caps.qmk {
                     if let Some(tag) = self.devices[self.selected].qmk.as_ref().and_then(|q| q.update_available()) {
                         if ui.add(egui::Button::new(RichText::new(format!("Firmware {tag} available")).color(Color32::BLACK)).fill(ACCENT).corner_radius(CornerRadius::same(12))).clicked() {
-                            self.tab = Tab::Settings;
+                            self.fw_popup = Some(self.selected);
                         }
                         ui.add_space(8.0);
                     }
@@ -617,7 +802,7 @@ impl OpenPeriphApp {
                 }
                 ui.add_space(10.0);
                 if dirty {
-                    pill(ui, "Unsent changes", Color32::from_rgb(240, 180, 60));
+                    pill(ui, "Unsent changes", WARN);
                 } else if connected {
                     pill(ui, "Up to date", GOOD);
                 }
@@ -1191,11 +1376,31 @@ impl eframe::App for OpenPeriphApp {
                     ui.label(RichText::new(&self.status).color(TEXT_DIM));
                 });
             });
+        // Keep the selection on a plugged-in device.
+        let visible = self.visible_devices();
+        if !visible.contains(&self.selected) {
+            if let Some(&i) = visible.first() {
+                self.selected = i;
+            }
+        }
+        let show_about = self.about || visible.is_empty();
         egui::CentralPanel::default()
             .frame(Frame::new().fill(BG).inner_margin(Margin::symmetric(26, 20)))
             .show(ui, |ui| {
+                if show_about {
+                    self.about_page(ui);
+                    return;
+                }
                 self.fix_tab();
                 self.header(ui);
+                let busy = self.devices[self.selected].qmk.as_ref().and_then(|q| q.fw_progress());
+                if let (Some((stage, f)), false) = (busy, self.tab == Tab::Settings) {
+                    card(ui, |ui| {
+                        progress_bar(ui, f, &format!("Updating the firmware: {stage}"));
+                        ui.label(RichText::new("Don't unplug the keyboard.").strong().color(WARN));
+                    });
+                    ui.add_space(8.0);
+                }
                 let qmk = self.devices[self.selected].qmk.is_some();
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match (qmk, self.tab) {
                     (true, tab) => self.qmk_page(ui, tab),
@@ -1205,6 +1410,8 @@ impl eframe::App for OpenPeriphApp {
                     _ => {}
                 });
             });
+
+        self.update_popups(&ctx);
 
         if let Some(path) = self.screenshot.clone() {
             self.frames += 1;
@@ -1258,6 +1465,62 @@ fn style(ctx: &egui::Context) {
         s.spacing.button_padding = Vec2::new(12.0, 6.0);
         s.spacing.slider_width = 220.0;
     });
+}
+
+/// A progress bar with its label above it in white, readable however full the bar is.
+fn progress_bar(ui: &mut Ui, fraction: f32, label: &str) {
+    let f = fraction.clamp(0.0, 1.0);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(label).strong().color(Color32::WHITE));
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.label(RichText::new(format!("{}%", (f * 100.0).round() as u32)).strong().color(Color32::WHITE));
+        });
+    });
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 10.0), Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, CornerRadius::same(5), KEYCAP);
+    let filled = Rect::from_min_size(rect.min, Vec2::new(rect.width() * f, rect.height()));
+    p.rect_filled(filled, CornerRadius::same(5), ACCENT);
+    ui.ctx().request_repaint_after(Duration::from_millis(100));
+}
+
+/// The accent-coloured button for the main action.
+fn primary_button(text: &str) -> egui::Button<'static> {
+    egui::Button::new(RichText::new(text.to_string()).strong().color(Color32::BLACK)).fill(ACCENT).corner_radius(CornerRadius::same(8)).min_size(Vec2::new(0.0, 32.0))
+}
+
+/// The first lines of a release's notes, as plain text.
+fn release_notes(ui: &mut Ui, notes: &str) {
+    let text: Vec<(bool, String)> = notes
+        .lines()
+        .map(|l| l.replace("**", "").replace('`', "").trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with('|') && !l.starts_with("---"))
+        .map(|l| match l.strip_prefix('#') {
+            Some(h) => (true, h.trim_start_matches('#').trim().to_string()),
+            None => match l.strip_prefix("- ").or_else(|| l.strip_prefix("* ")) {
+                Some(item) => (false, format!("•  {item}")),
+                None => (false, l),
+            },
+        })
+        .take(10)
+        .collect();
+    if text.is_empty() {
+        return;
+    }
+    ui.add_space(6.0);
+    egui::Frame::new().fill(Color32::from_rgb(24, 27, 33)).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(10)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+            for (heading, l) in text {
+                if heading {
+                    ui.label(RichText::new(l).size(13.0).strong().color(Color32::WHITE));
+                } else {
+                    ui.label(RichText::new(l).size(12.5).color(Color32::from_rgb(200, 205, 214)));
+                }
+            }
+        });
+    });
+    ui.add_space(6.0);
 }
 
 fn pill(ui: &mut Ui, text: &str, colour: Color32) {
