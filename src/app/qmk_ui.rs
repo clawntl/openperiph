@@ -92,6 +92,10 @@ pub enum FwMsg {
 }
 
 impl QmkState {
+    pub fn flashing(&self) -> bool {
+        self.fw_busy.is_some()
+    }
+
     /// The newer release's tag, when the keyboard's firmware is older.
     pub fn update_available(&self) -> Option<String> {
         let installed = self.snap.as_ref()?.firmware.unwrap_or(0);
@@ -245,6 +249,7 @@ impl OpenPeriphApp {
                 tag: "v1.0.1".into(),
                 version: 0x010001,
                 download_url: String::new(),
+                sha256: None,
                 page_url: format!("https://github.com/{}/releases", src.repo),
             }));
             return;
@@ -335,7 +340,7 @@ impl OpenPeriphApp {
                     None => {
                         let r = release.as_ref().unwrap();
                         report("Downloading", 0.0);
-                        (firmware::download(&r.download_url)?, r.tag.clone())
+                        (firmware::download(r)?, r.tag.clone())
                     }
                 };
                 firmware::update(src, &image, &report)?;

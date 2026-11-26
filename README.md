@@ -48,6 +48,18 @@ The very first flash over Cooler Master's own firmware still needs the SK620 pro
 `sk620_flash` (the chip is read-protected until it is mass-erased with the SEL2 pads bridged).
 After that, every update works from here.
 
+## Updating OpenPeriph
+
+When it starts, OpenPeriph asks GitHub for its newest release. If there is a newer one, **Update
+OpenPeriph to …** appears at the bottom left. It downloads the release, checks it against the
+SHA-256 GitHub lists for the file, installs it and restarts:
+
+- Arch package: installs the new package with `pacman -U` (through `pkexec`, so it asks for your
+  password).
+- Windows `.exe`, or the Linux program kept in a folder you can write to (such as `~/.local/bin`):
+  replaces the program file.
+- Anywhere else: opens the release page.
+
 ## Arch Linux and CachyOS
 
 Install the package from a [release](https://github.com/clawntl/openperiph/releases)

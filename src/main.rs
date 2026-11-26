@@ -10,7 +10,9 @@ mod device;
 mod drivers;
 mod hid;
 mod keycodes;
+mod net;
 mod qmk;
+mod selfupdate;
 mod store;
 
 use std::path::PathBuf;

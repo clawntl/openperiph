@@ -18,6 +18,7 @@ use crate::device::{DeviceKind, Driver, EffectSettings, KeySettings, LightingSta
 use crate::keycodes::{
     KeyAction, MouseAction, KEY_GROUPS, MEDIA, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN,
 };
+use crate::selfupdate::{self, AppRelease, InstallKind};
 use crate::{drivers, hid, qmk, store};
 
 const ACCENT: Color32 = Color32::from_rgb(46, 196, 214);
@@ -87,6 +88,10 @@ enum Msg {
     Discovered(Vec<hid::Collection>),
     Qmk(usize, qmk::Event),
     Firmware(usize, qmk_ui::FwMsg),
+    /// Updating OpenPeriph itself.
+    AppLatest(Result<AppRelease, String>),
+    AppProgress(String, f32),
+    AppInstalled(Result<PathBuf, String>),
     Access(Result<(), String>),
     Lighting(usize, Result<LightingState, String>),
     /// A mouse profile read; `true` when it replaces unsent edits (the person picked another profile).
@@ -157,6 +162,9 @@ pub struct OpenPeriphApp {
     frames: u32,
     screenshot_sent: bool,
     discovering: bool,
+    app_release: Option<Result<AppRelease, String>>,
+    app_update: Option<(String, f32)>,
+    install_kind: InstallKind,
 }
 
 impl OpenPeriphApp {
@@ -199,7 +207,29 @@ impl OpenPeriphApp {
             frames: 0,
             screenshot_sent: false,
             discovering: false,
+            app_release: None,
+            app_update: None,
+            install_kind: selfupdate::install_kind(),
         }
+        .start_app_check(&cc.egui_ctx)
+    }
+
+    /// Cleans up after an earlier update and looks for a newer OpenPeriph.
+    fn start_app_check(mut self, ctx: &egui::Context) -> Self {
+        if self.screenshot_mode() {
+            // no network in checks: show what an available update looks like
+            let release = crate::net::GhRelease { tag: "v9.9.9".into(), ..Default::default() };
+            self.app_release = Some(Ok(AppRelease { release, version: 0x090909 }));
+            return self;
+        }
+        selfupdate::clean_up();
+        let tx = self.tx.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(Msg::AppLatest(selfupdate::latest()));
+            ctx.request_repaint();
+        });
+        self
     }
 
     fn screenshot_mode(&self) -> bool {
@@ -279,6 +309,25 @@ impl OpenPeriphApp {
                 }
                 Msg::Qmk(i, e) => self.qmk_event(i, e),
                 Msg::Firmware(i, m) => self.firmware_msg(i, m),
+                Msg::AppLatest(r) => {
+                    if let Ok(a) = &r {
+                        if a.newer() {
+                            self.set_status(format!("OpenPeriph {} is available: see the bottom left.", a.release.tag), true);
+                        }
+                    }
+                    self.app_release = Some(r);
+                }
+                Msg::AppProgress(stage, f) => {
+                    self.status = format!("Updating OpenPeriph: {stage} {}%", (f * 100.0) as u32);
+                    self.app_update = Some((stage, f));
+                }
+                Msg::AppInstalled(r) => {
+                    self.app_update = None;
+                    match r {
+                        Ok(program) => selfupdate::restart(&program),
+                        Err(e) => self.set_status(format!("OpenPeriph wasn't updated: {e}"), false),
+                    }
+                }
                 Msg::Access(r) => match r {
                     Ok(()) => self.set_status("Access granted. Unplug the device and plug it back in.".into(), true),
                     Err(e) => self.set_status(e, false),
@@ -452,11 +501,58 @@ impl OpenPeriphApp {
         ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
             ui.add_space(14.0);
             ui.label(
-                RichText::new(format!("{} supported device{}", self.devices.len(), if self.devices.len() == 1 { "" } else { "s" }))
-                    .size(11.0)
-                    .color(TEXT_DIM),
+                RichText::new(format!(
+                    "OpenPeriph v{} · {} device{}",
+                    env!("CARGO_PKG_VERSION"),
+                    self.devices.len(),
+                    if self.devices.len() == 1 { "" } else { "s" }
+                ))
+                .size(11.0)
+                .color(TEXT_DIM),
             );
+            self.app_update_box(ui);
         });
+    }
+
+    /// "Update to vX" in the sidebar, or its progress.
+    fn app_update_box(&mut self, ui: &mut Ui) {
+        if let Some((stage, f)) = &self.app_update {
+            ui.add(egui::ProgressBar::new(*f).text(stage.as_str()).desired_width(ui.available_width()));
+            return;
+        }
+        let Some(Ok(a)) = &self.app_release else { return };
+        if !a.newer() {
+            return;
+        }
+        let a = a.clone();
+        let flashing = self.devices.iter().any(|d| d.qmk.as_ref().is_some_and(|q| q.flashing()));
+        let manual = self.install_kind == InstallKind::Manual;
+        let text = if manual { format!("{} available: open the release", a.release.tag) } else { format!("Update OpenPeriph to {}", a.release.tag) };
+        let btn = egui::Button::new(RichText::new(text).color(Color32::BLACK)).fill(ACCENT).corner_radius(CornerRadius::same(8)).min_size(Vec2::new(ui.available_width(), 30.0));
+        let hint = match &self.install_kind {
+            InstallKind::Pacman => "Downloads the new Arch package and installs it with pacman (asks for your password), then restarts OpenPeriph.",
+            InstallKind::Replace(_) => "Downloads the new version, replaces this one and restarts OpenPeriph.",
+            InstallKind::Manual => "This copy can't be replaced from here; opens the release page.",
+        };
+        if ui.add_enabled(!flashing && !self.screenshot_mode(), btn).on_hover_text(hint).clicked() {
+            if manual {
+                ui.ctx().open_url(egui::OpenUrl::new_tab(&a.release.page_url));
+                return;
+            }
+            self.app_update = Some(("Starting".into(), 0.0));
+            let kind = self.install_kind.clone();
+            let tx = self.tx.clone();
+            let ctx = ui.ctx().clone();
+            std::thread::spawn(move || {
+                let report = |stage: &str, f: f32| {
+                    let _ = tx.send(Msg::AppProgress(stage.to_string(), f));
+                    ctx.request_repaint();
+                };
+                let r = selfupdate::install(&a, &kind, &report);
+                let _ = tx.send(Msg::AppInstalled(r));
+                ctx.request_repaint();
+            });
+        }
     }
 
     fn header(&mut self, ui: &mut Ui) {

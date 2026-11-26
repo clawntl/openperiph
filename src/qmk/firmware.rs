@@ -11,7 +11,6 @@
 //! over the packet with the CRC bytes zeroed; results are read with a HID GET_REPORT, one byte
 //! per finished command, 'O' (passed) or 'F' (failed).
 
-use std::io::Read;
 use std::time::{Duration, Instant};
 
 use crate::hid;
@@ -62,45 +61,22 @@ pub struct Release {
     pub tag: String,
     pub version: u32,
     pub download_url: String,
+    pub sha256: Option<String>,
     pub page_url: String,
-}
-
-fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout(Duration::from_secs(20)).build()
 }
 
 /// The newest release that has the firmware file.
 pub fn latest(src: &Source) -> Result<Release, String> {
-    let url = format!("https://api.github.com/repos/{}/releases/latest", src.repo);
-    let v: serde_json::Value = agent()
-        .get(&url)
-        .set("User-Agent", concat!("OpenPeriph/", env!("CARGO_PKG_VERSION")))
-        .set("Accept", "application/vnd.github+json")
-        .call()
-        .map_err(|e| format!("Couldn't check for firmware updates: {e}"))?
-        .into_json()
-        .map_err(|e| format!("GitHub sent an unexpected answer: {e}"))?;
-    let tag = v["tag_name"].as_str().ok_or("GitHub sent no release name.")?.to_string();
-    let version = parse_version(&tag).ok_or_else(|| format!("The latest release, {tag}, has no version number."))?;
-    let download_url = v["assets"]
-        .as_array()
-        .and_then(|a| a.iter().find(|x| x["name"] == src.asset))
-        .and_then(|x| x["browser_download_url"].as_str())
-        .ok_or_else(|| format!("Release {tag} has no {}.", src.asset))?
-        .to_string();
-    let page_url = v["html_url"].as_str().unwrap_or("").to_string();
-    Ok(Release { tag, version, download_url, page_url })
+    let r = crate::net::latest_release(src.repo).map_err(|e| format!("Couldn't check for firmware updates: {e}"))?;
+    let version = parse_version(&r.tag).ok_or_else(|| format!("The latest release, {}, has no version number.", r.tag))?;
+    let a = r.assets.iter().find(|a| a.name == src.asset).ok_or_else(|| format!("Release {} has no {}.", r.tag, src.asset))?;
+    Ok(Release { tag: r.tag.clone(), version, download_url: a.url.clone(), sha256: a.sha256.clone(), page_url: r.page_url })
 }
 
-pub fn download(url: &str) -> Result<Vec<u8>, String> {
-    let r = agent()
-        .get(url)
-        .set("User-Agent", concat!("OpenPeriph/", env!("CARGO_PKG_VERSION")))
-        .call()
-        .map_err(|e| format!("Couldn't download the firmware: {e}"))?;
-    let mut out = Vec::new();
-    r.into_reader().take(512 * 1024).read_to_end(&mut out).map_err(|e| e.to_string())?;
-    Ok(out)
+pub fn download(r: &Release) -> Result<Vec<u8>, String> {
+    let data = crate::net::download(&r.download_url, 512 * 1024, &|_| {})?;
+    crate::net::verify(&data, r.sha256.as_deref())?;
+    Ok(data)
 }
 
 const FLASH_SIZE: usize = 128 * 1024;
@@ -467,7 +443,7 @@ mod tests {
     fn live_release() {
         let r = latest(&SOURCES[0]).unwrap();
         println!("{r:?}");
-        let img = download(&r.download_url).unwrap();
+        let img = download(&r).unwrap();
         check_image(&img).unwrap();
         println!("{} bytes", img.len());
     }

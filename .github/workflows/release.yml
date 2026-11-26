@@ -68,11 +68,15 @@ jobs:
           mkdir "$name"
           cp target/release/openperiph README.md MECHANICS.md "$name/"
           tar czf "$name.tar.gz" "$name"
+          # the bare program, which the app's own updater downloads
+          cp target/release/openperiph openperiph-linux-x64
 
       - uses: actions/upload-artifact@v7
         with:
           name: linux
-          path: openperiph-*-linux-x64.tar.gz
+          path: |
+            openperiph-*-linux-x64.tar.gz
+            openperiph-linux-x64
 
   arch:
     runs-on: ubuntu-latest
@@ -110,6 +114,7 @@ jobs:
             artifacts/openperiph-*-windows-x64.zip \
             artifacts/target/release/openperiph.exe \
             artifacts/openperiph-*-linux-x64.tar.gz \
+            artifacts/openperiph-linux-x64 \
             artifacts/openperiph-*.pkg.tar.zst \
             --target "$GITHUB_SHA" \
             --title "OpenPeriph $tag" \
