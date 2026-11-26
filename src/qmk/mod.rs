@@ -7,6 +7,7 @@
 
 pub mod definition;
 pub mod demo;
+pub mod firmware;
 pub mod keycodes;
 mod keycodes_table;
 pub mod macros;
@@ -307,6 +308,38 @@ fn run<T: Transport + ?Sized>(v: &mut Via<Box<T>>, job: Job, unsaved: &mut Vec<u
     })
 }
 
+/// The keymap the firmware starts with, read without losing the current one: reads the keymap,
+/// resets it to the firmware's default, reads that, and writes the current one back.
+pub fn read_default_keymap(path: &str, layers: usize, rows: usize, cols: usize) -> Result<Vec<Vec<Vec<u16>>>, String> {
+    let connect = connect_hid(path.to_string());
+    let mut v = Via::new(connect()?);
+    let current = v.read_keymap(layers, rows, cols)?;
+    v.reset_keymap()?;
+    let defaults = v.read_keymap(layers, rows, cols);
+    v.write_keymap(&current)?;
+    defaults
+}
+
+/// After a firmware update: only the keys the person changed from the old firmware's defaults
+/// are put back, so keys the new firmware changed (fixes) come through. Macros and lighting are
+/// put back as they were.
+pub fn changes_only(b: &Backup, old_defaults: &[Vec<Vec<u16>>], new_keymap: &[Vec<Vec<u16>>], def: &Definition) -> Backup {
+    let mut out = b.clone();
+    for (l, layer) in out.layers.iter_mut().enumerate() {
+        for (i, name) in layer.iter_mut().enumerate() {
+            let (r, c) = (i / def.cols, i % def.cols);
+            let old = old_defaults.get(l).and_then(|x| x.get(r)).and_then(|x| x.get(c)).copied();
+            let mine = keycodes::parse(name, &def.custom_keycodes);
+            if old.is_some() && mine == old {
+                if let Some(new) = new_keymap.get(l).and_then(|x| x.get(r)).and_then(|x| x.get(c)) {
+                    *name = keycodes::name(*new);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Makes a backup from what was read.
 pub fn backup(def: &Definition, s: &Snapshot) -> Backup {
     Backup {
@@ -410,5 +443,19 @@ mod tests {
         jobs.send(restore_job(&def, &s2, &b2).unwrap()).unwrap();
         assert!(matches!(wait(), Event::Done(Ok(_))));
         assert_eq!(kb.lock().unwrap().keymap[2 * 72], 0x7C00);
+    }
+
+    #[test]
+    fn update_keeps_only_personal_changes() {
+        let def = Definition::parse(definition::BUNDLED[0]).unwrap();
+        let old: Vec<Vec<Vec<u16>>> = vec![vec![vec![4; 8]; 9]; 2];
+        let mut mine = old.clone();
+        mine[0][0][0] = 0x29; // the person remapped this key
+        let mut new = old.clone();
+        new[1][4][4] = 0x7F; // the new firmware changed this default
+        let s = Snapshot { layers: 2, keymap: mine, ..Default::default() };
+        let b = changes_only(&backup(&def, &s), &old, &new, &def);
+        assert_eq!(b.layers[0][0], "KC_ESC");
+        assert_eq!(keycodes::parse(&b.layers[1][4 * 8 + 4], &[]), Some(0x7F));
     }
 }

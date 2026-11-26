@@ -161,7 +161,7 @@ mod imp {
     };
     use windows_sys::Win32::Devices::HumanInterfaceDevice::{
         HidD_FreePreparsedData, HidD_GetAttributes, HidD_GetFeature, HidD_GetHidGuid,
-        HidD_GetManufacturerString, HidD_GetPreparsedData, HidD_GetProductString,
+        HidD_GetInputReport, HidD_GetManufacturerString, HidD_GetPreparsedData, HidD_GetProductString,
         HidD_GetSerialNumberString, HidD_SetFeature, HidP_GetCaps, HIDD_ATTRIBUTES, HIDP_CAPS,
     };
     use windows_sys::Win32::Foundation::{
@@ -237,6 +237,10 @@ mod imp {
         }
         pub fn get_feature(&self, buf: &mut [u8]) -> bool {
             unsafe { HidD_GetFeature(self.h, buf.as_mut_ptr() as *mut c_void, buf.len() as u32) }
+        }
+        /// Asks the device for an input report over the control pipe (byte 0 = report ID).
+        pub fn get_input_report(&self, buf: &mut [u8]) -> bool {
+            unsafe { HidD_GetInputReport(self.h, buf.as_mut_ptr() as *mut c_void, buf.len() as u32) }
         }
 
         /// Waits for an overlapped operation; on timeout cancels it and waits for the cancel so
@@ -438,6 +442,11 @@ mod imp {
             let r = unsafe { libc::ioctl(self.file.as_raw_fd(), ioc_rw(0x07, buf.len()) as _, buf.as_mut_ptr()) };
             r >= 0
         }
+        /// Asks the device for an input report over the control pipe (HIDIOCGINPUT; byte 0 = report ID).
+        pub fn get_input_report(&self, buf: &mut [u8]) -> bool {
+            let r = unsafe { libc::ioctl(self.file.as_raw_fd(), ioc_rw(0x0A, buf.len()) as _, buf.as_mut_ptr()) };
+            r >= 0
+        }
 
         /// Sends an output report (byte 0 = report ID, 0 if unnumbered: hidraw uses the same rule).
         pub fn write(&self, buf: &[u8], _timeout_ms: u32) -> bool {
@@ -555,6 +564,9 @@ mod imp {
         pub fn get_feature(&self, _buf: &mut [u8]) -> bool {
             false
         }
+        pub fn get_input_report(&self, _buf: &mut [u8]) -> bool {
+            false
+        }
         pub fn write(&self, _buf: &[u8], _timeout_ms: u32) -> bool {
             false
         }
@@ -582,7 +594,7 @@ pub fn collections(vid: u16, pid: u16) -> Vec<Collection> {
 
 /// Where the rule file goes.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub const UDEV_RULES: &str = "/etc/udev/rules.d/60-openperiph.rules";
+pub const UDEV_RULES: &str = "/etc/udev/rules.d/61-openperiph-local.rules";
 
 /// The rule line for one device.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]

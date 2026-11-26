@@ -26,7 +26,7 @@ pub const SK620_LAYERS: [[[&str; 8]; 9]; 2] = [
         ["KC_TRNS", "KC_TRNS", "KC_TRNS", "KC_F8", "KC_F9", "KC_F10", "KC_F11", "KC_EJCT"],
         ["RM_VALD", "KC_NO", "KC_F12", "KC_SCRL", "KC_PAUS", "KC_INS", "KC_HOME", "KC_NO"],
         ["KC_TRNS", "RM_NEXT", "KC_PGUP", "KC_MPRV", "KC_MNXT", "KC_END", "KC_PGDN", "KC_TRNS"],
-        ["KC_TRNS", "RM_VALU", "KC_TRNS", "KC_VOLD", "KC_VOLU", "KC_MUTE", "GU_TOGG", "RM_PREV"],
+        ["KC_TRNS", "RM_VALU", "KC_TRNS", "KC_MUTE", "KC_VOLD", "KC_VOLU", "GU_TOGG", "RM_PREV"],
         ["KC_NO", "KC_NO", "KC_NO", "KC_TRNS", "KC_TRNS", "KC_NO", "KC_TRNS", "KC_NO"],
     ],
 ];

@@ -38,3 +38,28 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.file }}
+
+  arch-package:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed git rust libxkbcommon libglvnd hicolor-icon-theme
+
+      - uses: actions/checkout@v7
+
+      - name: makepkg
+        run: |
+          useradd -m builder
+          chown -R builder: .
+          su builder -c "cd packaging/arch && makepkg --noconfirm --nodeps"
+          ls -l packaging/arch/*.pkg.tar.zst
+
+      - name: Install it (checks the package is well-formed)
+        run: pacman -U --noconfirm packaging/arch/openperiph-*.pkg.tar.zst && pacman -Ql openperiph
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: openperiph-arch-x86_64
+          path: packaging/arch/openperiph-*.pkg.tar.zst

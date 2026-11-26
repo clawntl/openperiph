@@ -86,6 +86,7 @@ enum Msg {
     /// QMK keyboards found on the system.
     Discovered(Vec<hid::Collection>),
     Qmk(usize, qmk::Event),
+    Firmware(usize, qmk_ui::FwMsg),
     Access(Result<(), String>),
     Lighting(usize, Result<LightingState, String>),
     /// A mouse profile read; `true` when it replaces unsent edits (the person picked another profile).
@@ -277,6 +278,7 @@ impl OpenPeriphApp {
                     self.add_discovered(found);
                 }
                 Msg::Qmk(i, e) => self.qmk_event(i, e),
+                Msg::Firmware(i, m) => self.firmware_msg(i, m),
                 Msg::Access(r) => match r {
                     Ok(()) => self.set_status("Access granted. Unplug the device and plug it back in.".into(), true),
                     Err(e) => self.set_status(e, false),
@@ -494,6 +496,12 @@ impl OpenPeriphApp {
                     return;
                 }
                 if caps.qmk {
+                    if let Some(tag) = self.devices[self.selected].qmk.as_ref().and_then(|q| q.update_available()) {
+                        if ui.add(egui::Button::new(RichText::new(format!("Firmware {tag} available")).color(Color32::BLACK)).fill(ACCENT).corner_radius(CornerRadius::same(12))).clicked() {
+                            self.tab = Tab::Settings;
+                        }
+                        ui.add_space(8.0);
+                    }
                     if connected {
                         pill(ui, "Changes are saved on the keyboard as you make them", GOOD);
                     } else {

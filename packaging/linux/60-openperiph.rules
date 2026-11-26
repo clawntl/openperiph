@@ -1,0 +1,11 @@
+# OpenPeriph: lets the signed-in user use these devices' HID interfaces without root.
+# Other QMK keyboards get a line added by the app's "Allow access" button.
+
+# Cooler Master SK620 running QMK, and its Holtek bootloader (firmware updates)
+KERNEL=="hidraw*", ATTRS{idVendor}=="feed", ATTRS{idProduct}=="0620", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="04d9", ATTRS{idProduct}=="8010", MODE="0660", TAG+="uaccess"
+# CIY X78 keyboard
+KERNEL=="hidraw*", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="0016", MODE="0660", TAG+="uaccess"
+# Attack Shark R5 ULTRA mouse: cable and receiver
+KERNEL=="hidraw*", ATTRS{idVendor}=="373e", ATTRS{idProduct}=="0046", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="373e", ATTRS{idProduct}=="0047", MODE="0660", TAG+="uaccess"

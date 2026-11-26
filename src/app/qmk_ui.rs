@@ -15,6 +15,7 @@ use crate::hid;
 use crate::qmk::definition::{self, Definition};
 use crate::qmk::keycodes::{self, CustomKeycode, KC_NO, KC_TRNS, MOD_ALT, MOD_CTL, MOD_GUI, MOD_RIGHT, MOD_SFT, QK_KB, QK_MACRO};
 use crate::qmk::menus::{self, Control, ControlKind};
+use crate::qmk::firmware::{self, Release};
 use crate::qmk::{self, Event, Job, Snapshot};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -68,9 +69,38 @@ pub struct QmkState {
     macro_insert: u16,
     /// A destructive button waiting for its second click.
     confirm: Option<&'static str>,
+    // firmware updates
+    fw_release: Option<Result<Release, String>>,
+    fw_checking: bool,
+    fw_checked: bool,
+    /// Stage and progress of an update in progress.
+    fw_busy: Option<(String, f32)>,
+    /// Don't put the keymap, macros and lighting back after updating.
+    fw_discard: bool,
+    /// Settings to put back once the updated keyboard is read, and the old firmware's default
+    /// keymap (to tell the person's changes from the firmware's).
+    pending_restore: Option<(qmk::Backup, Option<Vec<Vec<Vec<u16>>>>)>,
+}
+
+/// Messages from firmware update threads.
+pub enum FwMsg {
+    Latest(Result<Release, String>),
+    Progress(String, f32),
+    /// The old firmware's default keymap, read before updating.
+    Defaults(Vec<Vec<Vec<u16>>>),
+    Done(Result<String, String>),
 }
 
 impl QmkState {
+    /// The newer release's tag, when the keyboard's firmware is older.
+    pub fn update_available(&self) -> Option<String> {
+        let installed = self.snap.as_ref()?.firmware.unwrap_or(0);
+        match &self.fw_release {
+            Some(Ok(r)) if r.version > installed && self.fw_busy.is_none() => Some(r.tag.clone()),
+            _ => None,
+        }
+    }
+
     fn send(&self, job: Job) {
         if let Some(tx) = &self.jobs {
             let _ = tx.send(job);
@@ -101,6 +131,9 @@ impl OpenPeriphApp {
         let screenshot = self.screenshot_mode();
         let driver = self.devices[i].driver.clone();
         let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        if q.fw_busy.is_some() {
+            return;
+        }
         if !connected || access {
             q.jobs = None;
             q.loading = false;
@@ -146,13 +179,35 @@ impl OpenPeriphApp {
                 if self.screenshot.is_some() && q.key.is_none() {
                     q.key = Some((2, 1));
                 }
+                if let Some((b, old_defaults)) = q.pending_restore.take() {
+                    let def = qmk_driver(&self.devices[i]).and_then(|d| d.definition());
+                    let q = self.devices[i].qmk.as_mut().unwrap();
+                    if let (Some(def), Some(snap)) = (def, q.snap.as_ref()) {
+                        let b = match &old_defaults {
+                            Some(old) => qmk::changes_only(&b, old, &snap.keymap, &def),
+                            None => b,
+                        };
+                        match qmk::restore_job(&def, snap, &b) {
+                            Ok(job) => {
+                                q.send(job);
+                                q.send(Job::Load(Some(def)));
+                                self.set_status("Putting your keymap, macros and lighting back…".into(), true);
+                            }
+                            Err(e) => self.set_status(format!("Couldn't put your settings back: {e}"), false),
+                        }
+                    }
+                    return;
+                }
                 self.set_status(format!("Read the keymap and settings from {name}."), true);
+                self.firmware_check(i, false);
             }
             Event::Loaded(Err(e)) => {
                 q.loading = false;
                 q.error = Some(e.clone());
                 q.jobs = None;
                 self.set_status(e, false);
+                // firmware without VIA can still be updated to one with it
+                self.firmware_check(i, false);
             }
             Event::Done(Ok(m)) => self.set_status(m, true),
             Event::Done(Err(e)) => {
@@ -162,6 +217,217 @@ impl OpenPeriphApp {
                 if let Some(q) = self.devices[i].qmk.as_mut() {
                     q.send(Job::Load(def));
                 }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Firmware updates
+
+    fn firmware_source(&self, i: usize) -> Option<&'static firmware::Source> {
+        let info = self.devices[i].driver.info();
+        firmware::source_for(info.vendor_id, info.product_id)
+    }
+
+    /// Looks up the newest release once per run (or again when `force`).
+    fn firmware_check(&mut self, i: usize, force: bool) {
+        let Some(src) = self.firmware_source(i) else { return };
+        let demo = qmk_driver(&self.devices[i]).is_some_and(|d| d.demo);
+        let screenshot = self.screenshot_mode();
+        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        if (q.fw_checked && !force) || q.fw_checking {
+            return;
+        }
+        q.fw_checked = true;
+        if screenshot || demo {
+            // no network in checks: pretend a newer release exists
+            q.fw_release = Some(Ok(Release {
+                tag: "v1.0.1".into(),
+                version: 0x010001,
+                download_url: String::new(),
+                page_url: format!("https://github.com/{}/releases", src.repo),
+            }));
+            return;
+        }
+        q.fw_checking = true;
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(Msg::Firmware(i, FwMsg::Latest(firmware::latest(src))));
+        });
+    }
+
+    pub(super) fn firmware_msg(&mut self, i: usize, m: FwMsg) {
+        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        match m {
+            FwMsg::Latest(r) => {
+                q.fw_checking = false;
+                let installed = q.snap.as_ref().and_then(|s| s.firmware).unwrap_or(0);
+                if let Ok(rel) = &r {
+                    if rel.version > installed {
+                        let text = format!("Firmware {} is available: Settings, Firmware.", rel.tag);
+                        q.fw_release = Some(r);
+                        self.set_status(text, true);
+                        return;
+                    }
+                }
+                q.fw_release = Some(r);
+            }
+            FwMsg::Defaults(d) => {
+                if let Some((_, slot)) = q.pending_restore.as_mut() {
+                    *slot = Some(d);
+                }
+            }
+            FwMsg::Progress(stage, f) => {
+                q.fw_busy = Some((stage.clone(), f));
+                self.status = format!("Updating firmware: {stage} {}%", (f * 100.0) as u32);
+            }
+            FwMsg::Done(r) => {
+                q.fw_busy = None;
+                q.jobs = None;
+                q.snap = None;
+                q.loading = true;
+                if r.is_err() {
+                    q.pending_restore = None;
+                }
+                self.last_detect = None; // look for the restarted keyboard now
+                match r {
+                    Ok(m) => self.set_status(m, true),
+                    Err(e) => self.set_status(format!("Firmware update failed: {e}"), false),
+                }
+            }
+        }
+    }
+
+    /// Starts an update from a release (`None` path) or a .bin file.
+    fn start_update(&mut self, i: usize, file: Option<std::path::PathBuf>) {
+        let Some(src) = self.firmware_source(i) else { return };
+        let def = qmk_driver(&self.devices[i]).and_then(|d| d.definition());
+        let raw_path = qmk_driver(&self.devices[i]).and_then(|d| d.find()).map(|c| c.path);
+        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let release = q.fw_release.as_ref().and_then(|r| r.as_ref().ok()).cloned();
+        if file.is_none() && release.is_none() {
+            return;
+        }
+        q.pending_restore = match (&def, &q.snap, q.fw_discard) {
+            (Some(d), Some(s), false) => Some((qmk::backup(d, s), None)),
+            _ => None,
+        };
+        let shape = match (&def, &q.snap, q.fw_discard) {
+            (Some(d), Some(s), false) => Some((s.layers, d.rows, d.cols)),
+            _ => None,
+        };
+        q.fw_busy = Some(("Starting".into(), 0.0));
+        q.jobs = None; // the worker lets go of the keyboard
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let report = |stage: &str, f: f32| {
+                let _ = tx.send(Msg::Firmware(i, FwMsg::Progress(stage.to_string(), f)));
+            };
+            let result = (|| {
+                if let (Some((l, r, c)), Some(p)) = (shape, &raw_path) {
+                    report("Saving your settings", 0.0);
+                    if let Ok(d) = qmk::read_default_keymap(p, l, r, c) {
+                        let _ = tx.send(Msg::Firmware(i, FwMsg::Defaults(d)));
+                    }
+                }
+                let (image, what) = match &file {
+                    Some(p) => (std::fs::read(p).map_err(|e| e.to_string())?, p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()),
+                    None => {
+                        let r = release.as_ref().unwrap();
+                        report("Downloading", 0.0);
+                        (firmware::download(&r.download_url)?, r.tag.clone())
+                    }
+                };
+                firmware::update(src, &image, &report)?;
+                Ok(format!("Installed {what}. The keyboard restarted with the new firmware."))
+            })();
+            let _ = tx.send(Msg::Firmware(i, FwMsg::Done(result)));
+        });
+    }
+
+    fn firmware_card(&mut self, ui: &mut Ui) {
+        let i = self.selected;
+        let Some(src) = self.firmware_source(i) else { return };
+        let connected = self.devices[i].connected == Some(true);
+        let demo = qmk_driver(&self.devices[i]).is_some_and(|d| d.demo);
+        let mut install = false;
+        let mut install_file = false;
+        let mut recheck = false;
+        {
+            let Some(q) = self.devices[i].qmk.as_mut() else { return };
+            let installed = q.snap.as_ref().and_then(|s| s.firmware).unwrap_or(0);
+            card(ui, |ui| {
+                ui.label(RichText::new("Firmware").size(16.0).strong().color(Color32::WHITE));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Installed").color(TEXT_DIM));
+                    ui.label(if installed > 0 { firmware::version_text(installed) } else { "v1.0.0 or older (it doesn't report a version)".into() });
+                });
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Latest").color(TEXT_DIM));
+                    match (&q.fw_release, q.fw_checking) {
+                        (_, true) => {
+                            ui.spinner();
+                        }
+                        (Some(Ok(r)), _) => {
+                            ui.hyperlink_to(&r.tag, &r.page_url);
+                            if r.version > installed {
+                                pill(ui, "Update available", ACCENT);
+                            } else {
+                                pill(ui, "Up to date", super::GOOD);
+                            }
+                        }
+                        (Some(Err(e)), _) => {
+                            ui.label(RichText::new(e).color(BAD));
+                        }
+                        (None, _) => {
+                            ui.label(RichText::new("not checked yet").color(TEXT_DIM));
+                        }
+                    }
+                    if ui.small_button("Check again").clicked() {
+                        recheck = true;
+                    }
+                });
+                ui.label(RichText::new(format!("From github.com/{}. The keyboard restarts into its bootloader, is written and checked, then restarts.", src.repo)).size(12.0).color(TEXT_DIM));
+                ui.add_space(4.0);
+                if let Some((stage, f)) = &q.fw_busy {
+                    ui.add(egui::ProgressBar::new(*f).text(stage.as_str()).desired_width(ui.available_width()));
+                    ui.label(RichText::new("Don't unplug the keyboard.").color(TEXT_DIM));
+                    return;
+                }
+                let mut keep = !q.fw_discard;
+                if ui.checkbox(&mut keep, "Keep my keymap, macros and lighting (they are saved first and put back after)").changed() {
+                    q.fw_discard = !keep;
+                }
+                ui.horizontal(|ui| {
+                    let rel = q.fw_release.as_ref().and_then(|r| r.as_ref().ok());
+                    if let Some(r) = rel {
+                        let newer = r.version > installed;
+                        let label = if newer { format!("Update to {}", r.tag) } else { format!("Reinstall {}", r.tag) };
+                        let btn = egui::Button::new(RichText::new(label).strong().color(if newer { Color32::BLACK } else { Color32::WHITE }))
+                            .fill(if newer { ACCENT } else { KEYCAP });
+                        if ui.add_enabled(connected && !demo, btn).clicked() {
+                            install = true;
+                        }
+                    }
+                    if ui.add_enabled(connected && !demo, egui::Button::new("Flash a file…")).clicked() {
+                        install_file = true;
+                    }
+                    if demo {
+                        ui.label(RichText::new("(not with the simulated keyboard)").color(TEXT_DIM));
+                    }
+                });
+            });
+        }
+        ui.add_space(10.0);
+        if recheck {
+            self.firmware_check(i, true);
+        }
+        if install {
+            self.start_update(i, None);
+        }
+        if install_file {
+            if let Some(p) = rfd::FileDialog::new().add_filter("Firmware", &["bin"]).set_title("Flash firmware").pick_file() {
+                self.start_update(i, Some(p));
             }
         }
     }
@@ -248,6 +514,9 @@ impl OpenPeriphApp {
             card(ui, |ui| {
                 ui.label(RichText::new("Couldn't read the keyboard").size(16.0).strong().color(BAD));
                 ui.label(RichText::new(e).color(TEXT_DIM));
+                if self.firmware_source(i).is_some() {
+                    ui.label(RichText::new("Its firmware can be updated on the Settings page.").color(TEXT_DIM));
+                }
                 if ui.button("Try again").clicked() {
                     if let Some(q) = self.devices[i].qmk.as_mut() {
                         q.error = None;
@@ -804,6 +1073,9 @@ impl OpenPeriphApp {
         let mut save_backup = false;
         let mut load_backup = false;
         {
+            if self.firmware_source(i).is_some() {
+                self.firmware_card(ui);
+            }
             let Some(q) = self.devices[i].qmk.as_mut() else { return };
             let snap = q.snap.clone();
             ui.columns(2, |cols| {

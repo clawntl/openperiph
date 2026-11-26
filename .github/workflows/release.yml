@@ -1,9 +1,11 @@
 name: Release
 
-# Push a tag like v0.1.0 to build the app for Windows and Linux and publish a GitHub release.
+# Push a tag like v0.2.0, or run this workflow by hand from the Actions tab (it then uses the
+# version in Cargo.toml), to build for Windows and Linux and publish a GitHub release.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,6 +22,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Check tag matches Cargo.toml version
+        if: github.event_name == 'push'
         shell: pwsh
         run: |
           $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
@@ -33,7 +36,8 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $name = "openperiph-${{ github.ref_name }}-windows-x64"
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $name = "openperiph-v$version-windows-x64"
           New-Item -ItemType Directory $name | Out-Null
           Copy-Item target/release/openperiph.exe, README.md, MECHANICS.md $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
@@ -60,7 +64,7 @@ jobs:
 
       - name: Package
         run: |
-          name="openperiph-${GITHUB_REF_NAME}-linux-x64"
+          name="openperiph-v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)-linux-x64"
           mkdir "$name"
           cp target/release/openperiph README.md MECHANICS.md "$name/"
           tar czf "$name.tar.gz" "$name"
@@ -70,8 +74,24 @@ jobs:
           name: linux
           path: openperiph-*-linux-x64.tar.gz
 
+  arch:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - run: pacman -Syu --noconfirm --needed git rust
+      - uses: actions/checkout@v7
+      - name: makepkg
+        run: |
+          useradd -m builder
+          chown -R builder: .
+          su builder -c "cd packaging/arch && makepkg --noconfirm --nodeps --nocheck"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: arch
+          path: packaging/arch/openperiph-*.pkg.tar.zst
+
   publish:
-    needs: [windows, linux]
+    needs: [windows, linux, arch]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -85,9 +105,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
+          tag="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+          gh release create "$tag" \
             artifacts/openperiph-*-windows-x64.zip \
             artifacts/target/release/openperiph.exe \
             artifacts/openperiph-*-linux-x64.tar.gz \
-            --title "OpenPeriph ${GITHUB_REF_NAME}" \
+            artifacts/openperiph-*.pkg.tar.zst \
+            --target "$GITHUB_SHA" \
+            --title "OpenPeriph $tag" \
             --generate-notes

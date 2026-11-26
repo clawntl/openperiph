@@ -1,0 +1,43 @@
+# Builds OpenPeriph from the repository this file is in:
+#   cd packaging/arch && makepkg -si
+# The version comes from Cargo.toml.
+
+pkgname=openperiph
+pkgver=$(sed -n 's/^version = "\(.*\)"/\1/p' "$startdir/../../Cargo.toml" | head -n1)
+pkgrel=1
+pkgdesc="Settings for PC peripherals (QMK/VIA keyboards, Cooler Master SK620, CIY X78, Attack Shark R5 ULTRA) without vendor software"
+arch=('x86_64' 'aarch64')
+url="https://github.com/clawntl/openperiph"
+license=('unknown')
+depends=('gcc-libs' 'glibc' 'libxkbcommon' 'libglvnd' 'hicolor-icon-theme')
+makedepends=('cargo')
+optdepends=('xdg-desktop-portal: file dialogs for importing VIA definitions and backups'
+            'polkit: the "Allow access" button for devices without a bundled udev rule')
+options=('!lto' '!debug')
+
+_root() {
+  cd "$startdir/../.."
+}
+
+build() {
+  _root
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo build --release --locked
+}
+
+check() {
+  _root
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo test --release --locked
+}
+
+package() {
+  _root
+  install -Dm755 "$srcdir/target/release/openperiph" "$pkgdir/usr/bin/openperiph"
+  install -Dm644 packaging/linux/openperiph.desktop "$pkgdir/usr/share/applications/openperiph.desktop"
+  install -Dm644 packaging/linux/openperiph.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/openperiph.svg"
+  install -Dm644 packaging/linux/60-openperiph.rules "$pkgdir/usr/lib/udev/rules.d/60-openperiph.rules"
+  install -Dm644 README.md MECHANICS.md -t "$pkgdir/usr/share/doc/openperiph/"
+}

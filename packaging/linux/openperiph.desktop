@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OpenPeriph
+GenericName=Peripheral settings
+Comment=Change keymaps, macros, lighting and mouse settings, and update keyboard firmware
+Exec=openperiph
+Icon=openperiph
+Terminal=false
+Categories=Settings;HardwareSettings;Utility;
+Keywords=keyboard;mouse;QMK;VIA;keymap;RGB;lighting;firmware;
