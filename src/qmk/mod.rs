@@ -428,6 +428,8 @@ mod tests {
         assert!(matches!(wait(), Event::Done(Ok(_))));
         std::thread::sleep(Duration::from_millis(700));
         assert_eq!(kb.lock().unwrap().saved_rgb[0], 90);
+        // the three changes may have been merged into fewer messages: drop the rest
+        while erx.try_recv().is_ok() {}
 
         let b = backup(&def, &{
             jobs.send(Job::Load(Some(def.clone()))).unwrap();
