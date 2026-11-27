@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.6.1 (2026-11-27)
+
 - CIY X78 running SMK: **firmware updates** from the Device page, as on the SK620. New releases of
   [smk-ciy-x78](https://github.com/clawntl/smk-ciy-x78) are offered; OpenPeriph switches the
   keyboard to its update mode, checks its bootloader is the known one (before erasing anything),
