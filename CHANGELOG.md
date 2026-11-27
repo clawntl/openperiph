@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.6.4 (2026-11-27)
+
 - Windows, CIY X78 on SMK: fixed "couldn't read the keyboard" and lighting changes not working.
   Its VIA messages go as feature reports, and Windows needs a non-overlapped handle for those;
   with an overlapped one the answer could be read before the keyboard had sent it.

@@ -1,6 +1,6 @@
 [package]
 name = "openperiph"
-version = "0.6.3"
+version = "0.6.4"
 edition = "2021"
 description = "Open settings app for PC peripherals (QMK/VIA keyboards, CIY X78 keyboard, Attack Shark R5 ULTRA mouse) without the vendor software, for Windows and Linux"
 # Only these affect the build (keeps cargo from looking into makepkg's folders in packaging/).
