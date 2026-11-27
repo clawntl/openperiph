@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v1.0.0 (2026-11-27)
+
 ## v0.3.0
 
 - New look: a neutral navy-grey theme with pale green buttons, the Inter typeface, smaller and
