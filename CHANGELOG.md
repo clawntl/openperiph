@@ -5,6 +5,14 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- A keyboard that has only just been plugged in is read again a few times before OpenPeriph says
+  it can't be read (on Windows its interfaces come up one by one, so the first try could fail
+  for a second or two).
+- A connected keyboard has to be missing twice running before it counts as unplugged. Windows
+  now and then leaves a device out of one listing, which dropped the keyboard's connection and
+  showed "can't read" for a couple of seconds while it was read again.
+- Plugged-in devices are looked for every 1.5 seconds instead of every 3, so they show up sooner.
+
 ## v0.6.5 (2026-11-27)
 
 - Windows: updating OpenPeriph through its installer no longer fails now and then, leaving it

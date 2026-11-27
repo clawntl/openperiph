@@ -19,6 +19,9 @@ use crate::selfupdate::{self, AppRelease, InstallKind};
 use crate::{drivers, hid, qmk, store};
 
 use shell::View;
+
+/// How often plugged-in devices are looked for.
+const DETECT_EVERY: Duration = Duration::from_millis(1500);
 use theme::{card, ACCENT, BAD, GOOD, KEYCAP, TEXT_DIM, WARN};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -100,6 +103,9 @@ struct DeviceEntry {
     needs_access: bool,
     /// A wireless device whose receiver is plugged in but which doesn't answer (off or asleep).
     receiver_only: bool,
+    /// Detection passes in a row that didn't see a connected keyboard; one miss is ignored
+    /// (Windows sometimes leaves a device out of one listing).
+    missed: u8,
     qmk: Option<qmk_ui::QmkState>,
 }
 
@@ -122,6 +128,7 @@ impl DeviceEntry {
             read_once: false,
             needs_access: false,
             receiver_only: false,
+            missed: 0,
             qmk,
         }
     }
@@ -275,7 +282,17 @@ impl OpenPeriphApp {
                     self.detecting = false;
                     let d = &mut self.devices[i];
                     let was = d.connected;
-                    let c = presence == Presence::Connected || (self.screenshot.is_some() && self.force_connected == Some(i));
+                    let mut c = presence == Presence::Connected || (self.screenshot.is_some() && self.force_connected == Some(i));
+                    // a QMK/SMK keyboard that was connected has to be missed twice running before
+                    // it counts as unplugged: dropping it means dropping its connection and
+                    // reading it all again ("can't read" for a moment)
+                    let updating = d.qmk.as_ref().is_some_and(|q| q.flashing() || q.awaiting_replug());
+                    if c {
+                        d.missed = 0;
+                    } else if was == Some(true) && d.qmk.is_some() && !updating && d.missed == 0 {
+                        d.missed = 1;
+                        c = true;
+                    }
                     let was_receiver_only = d.receiver_only;
                     d.receiver_only = presence == Presence::ReceiverOnly && !c;
                     d.connected = Some(c);
@@ -406,7 +423,9 @@ impl OpenPeriphApp {
             }
         }
 
-        let due = self.last_detect.map_or(true, |t| t.elapsed() > Duration::from_secs(3));
+        // every 1.5 s: a keyboard that's plugged in shows up quickly (looking is cheap now that
+        // device names are remembered)
+        let due = self.last_detect.map_or(true, |t| t.elapsed() > DETECT_EVERY);
         if due && !self.detecting && !self.busy {
             self.detecting = true;
             self.last_detect = Some(Instant::now());
@@ -442,7 +461,7 @@ impl OpenPeriphApp {
                 });
             }
         }
-        ctx.request_repaint_after(Duration::from_secs(3));
+        ctx.request_repaint_after(DETECT_EVERY);
     }
 
     fn set_status(&mut self, s: String, ok: bool) {

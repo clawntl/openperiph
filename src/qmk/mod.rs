@@ -68,6 +68,9 @@ pub struct Backup {
     pub values: HashMap<String, Vec<u8>>,
 }
 
+/// Tries at reading a keyboard before giving up (about 2.4 s in all).
+const LOAD_ATTEMPTS: usize = 4;
+
 pub enum Job {
     Load(Option<Arc<Definition>>),
     SetKey {
@@ -169,14 +172,44 @@ fn worker(connect: Connect, rx: Receiver<Job>, notify: impl Fn(Event)) {
             }
             j => j,
         };
+        // Reading a keyboard that has only just appeared can fail for a moment (on Windows its
+        // interfaces come up one by one, and it may still be starting): try a few times, a
+        // little apart, before saying it can't be read.
+        if let Job::Load(def) = &job {
+            let mut last = String::new();
+            let mut loaded = None;
+            for attempt in 0..LOAD_ATTEMPTS {
+                if attempt > 0 {
+                    std::thread::sleep(Duration::from_millis(400 * attempt as u64));
+                }
+                if via.is_none() {
+                    match connect() {
+                        Ok(t) => via = Some(Via::new(t)),
+                        Err(e) => {
+                            last = e;
+                            continue;
+                        }
+                    }
+                }
+                match load(via.as_mut().unwrap(), def.as_deref()) {
+                    Ok(snap) => {
+                        loaded = Some(snap);
+                        break;
+                    }
+                    Err(e) => {
+                        last = e;
+                        via = None;
+                    }
+                }
+            }
+            notify(Event::Loaded(loaded.ok_or(last)));
+            continue;
+        }
         if via.is_none() {
             match connect() {
                 Ok(t) => via = Some(Via::new(t)),
                 Err(e) => {
-                    notify(match job {
-                        Job::Load(_) => Event::Loaded(Err(e)),
-                        _ => Event::Done(Err(e)),
-                    });
+                    notify(Event::Done(Err(e)));
                     continue;
                 }
             }
