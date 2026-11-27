@@ -37,7 +37,9 @@ plugged in stay out of the way; **About** (the ⓘ button) lists everything that
 
 Get the latest version from [Releases](https://github.com/clawntl/openperiph/releases/latest):
 
-- **Windows:** download `openperiph.exe` and run it. Nothing to install.
+- **Windows:** `openperiph-setup-x64.exe` installs it with a Start menu entry and an
+  uninstaller (no administrator rights needed). Or download `openperiph.exe` and just run it
+  from anywhere: it's portable and installs nothing.
 - **Arch Linux and CachyOS:** download the `.pkg.tar.zst` file, then
   `sudo pacman -Syu && sudo pacman -U openperiph-*-x86_64.pkg.tar.zst`.
 - **Other Linux:** download `openperiph-linux-x64`, make it executable and run it.
@@ -57,8 +59,7 @@ Keyboards with firmware updates (the SK620) are checked when you plug them in, i
 ## Look
 
 The app has a neutral dark theme. **About → Appearance** sets what's behind the panels: plain,
-faint smoke, or a picture of your own. A device's **Device** page can show a photo of your own
-device instead of the drawing.
+faint smoke, or a picture of your own.
 
 ## More
 

@@ -75,6 +75,15 @@ jobs:
           Compress-Archive -Path $name -DestinationPath "dist/$name.zip"
           # the bare program, which the app's own updater downloads
           Copy-Item target/release/openperiph.exe dist/openperiph.exe
+      - name: Installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Null }
+          & $iscc /Q "/DAppVersion=${{ needs.version.outputs.version }}" packaging\windows\openperiph.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          Get-ChildItem dist
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -136,8 +145,9 @@ jobs:
 
           | File | For |
           | --- | --- |
-          | `openperiph.exe` | Windows: just run it |
-          | `openperiph-*-windows-x64.zip` | Windows, with the README |
+          | `openperiph-setup-x64.exe` | Windows installer: Start menu entry, uninstaller, no admin rights needed |
+          | `openperiph.exe` | Windows, portable: just run it |
+          | `openperiph-*-windows-x64.zip` | Windows, portable, with the README |
           | `openperiph-*-x86_64.pkg.tar.zst` | Arch / CachyOS: `sudo pacman -U` it |
           | `openperiph-linux-x64` | Other Linux: make it executable and run it |
           | `openperiph-*-linux-x64.tar.gz` | Other Linux, with the README |

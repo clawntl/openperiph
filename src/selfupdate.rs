@@ -6,6 +6,8 @@
 //! - **A file you can write to** (the Windows .exe, or the Linux binary in your home folder):
 //!   download the new one next to it and swap them. Windows can't overwrite a running .exe but
 //!   can rename it, so the old one becomes `openperiph.old.exe` and is deleted next start.
+//! - **Windows installer** (an `unins000.exe` sits next to the program): download the new
+//!   installer and run it quietly; it closes this copy, installs and starts the new one.
 //! - **Anywhere else** (a system folder without pacman): open the release page instead.
 //!
 //! Downloads are checked against the SHA-256 GitHub reports for each release file.
@@ -27,6 +29,8 @@ pub enum InstallKind {
     Pacman,
     /// A program file this user can replace.
     Replace(PathBuf),
+    /// Installed by the Windows installer.
+    WindowsSetup,
     /// Can't update in place; show the release page.
     Manual,
 }
@@ -75,6 +79,9 @@ pub fn install_kind() -> InstallKind {
             return InstallKind::Pacman;
         }
     }
+    if cfg!(windows) && exe.with_file_name("unins000.exe").is_file() {
+        return InstallKind::WindowsSetup;
+    }
     if writable_dir(&exe) {
         InstallKind::Replace(exe)
     } else {
@@ -90,6 +97,7 @@ pub fn asset<'a>(kind: &InstallKind, r: &'a GhRelease) -> Option<&'a GhAsset> {
             let arch = std::env::consts::ARCH;
             find(&|n| n.starts_with("openperiph-") && n.ends_with(&format!("-{arch}.pkg.tar.zst")))
         }
+        InstallKind::WindowsSetup => find(&|n| n == "openperiph-setup-x64.exe"),
         InstallKind::Replace(_) if cfg!(windows) => find(&|n| n == "openperiph.exe"),
         InstallKind::Replace(_) if cfg!(all(target_os = "linux", target_arch = "x86_64")) => find(&|n| n == "openperiph-linux-x64"),
         _ => None,
@@ -156,6 +164,18 @@ pub fn install(r: &AppRelease, kind: &InstallKind, progress: &dyn Fn(&str, f32))
             Ok(PathBuf::from("/usr/bin/openperiph"))
         }
         InstallKind::Replace(exe) => replace_program(exe, &data),
+        InstallKind::WindowsSetup => {
+            let file = std::env::temp_dir().join(&a.name);
+            std::fs::write(&file, &data).map_err(|e| format!("Couldn't save the installer: {e}"))?;
+            // the same install mode as before: per user, or for everyone (then Windows asks)
+            let per_user = std::env::current_exe().map(|e| writable_dir(&e)).unwrap_or(true);
+            std::process::Command::new(&file)
+                .args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", if per_user { "/CURRENTUSER" } else { "/ALLUSERS" }])
+                .spawn()
+                .map_err(|e| format!("Couldn't start the installer: {e}"))?;
+            // The installer replaces this program and starts the new one.
+            std::process::exit(0);
+        }
         InstallKind::Manual => Err("Can't update this copy in place.".into()),
     }
 }
@@ -172,7 +192,7 @@ mod tests {
 
     #[test]
     fn picks_the_right_file() {
-        let names = ["openperiph.exe", "openperiph-linux-x64", "openperiph-0.3.0-1-x86_64.pkg.tar.zst", "openperiph-v0.3.0-windows-x64.zip"];
+        let names = ["openperiph.exe", "openperiph-linux-x64", "openperiph-0.3.0-1-x86_64.pkg.tar.zst", "openperiph-v0.3.0-windows-x64.zip", "openperiph-setup-x64.exe"];
         let r = GhRelease {
             tag: "v0.3.0".into(),
             page_url: String::new(),
@@ -186,6 +206,7 @@ mod tests {
         if cfg!(windows) {
             assert_eq!(asset(&InstallKind::Replace(PathBuf::new()), &r).unwrap().name, names[0]);
         }
+        assert_eq!(asset(&InstallKind::WindowsSetup, &r).unwrap().name, names[4]);
         assert!(asset(&InstallKind::Manual, &r).is_none());
     }
 

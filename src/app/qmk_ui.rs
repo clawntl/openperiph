@@ -590,8 +590,6 @@ impl OpenPeriphApp {
         };
         if tab == Tab::Settings {
             self.qmk_settings_page(ui, def.as_deref());
-            ui.add_space(10.0);
-            self.picture_card(ui);
             return;
         }
         if !connected && !have {
@@ -1200,10 +1198,26 @@ impl OpenPeriphApp {
         let i = self.selected;
         let info = self.devices[i].driver.info().clone();
         let connected = self.devices[i].connected == Some(true);
-        let mut import = false;
+        let import;
         let mut save_backup = false;
         let mut load_backup = false;
         {
+            let snap0 = self.devices[i].qmk.as_ref().and_then(|q| q.snap.clone());
+            let mut tiles: Vec<(&str, String)> = vec![("USB id", format!("{:04X}:{:04X}", info.vendor_id, info.product_id))];
+            if let Some(s) = &snap0 {
+                if self.firmware_source(i).is_some() || s.firmware.is_some_and(|f| f != 0) {
+                    let fw = s.firmware.filter(|f| *f != 0).map(firmware::version_text).unwrap_or_else(|| "1.0.0 or older".into());
+                    tiles.push(("Firmware", fw));
+                }
+            }
+            tiles.push(("Definition", def.map(|d| d.name.clone()).unwrap_or_else(|| "None".into())));
+            if let Some(s) = &snap0 {
+                tiles.push(("VIA protocol", s.protocol.to_string()));
+                tiles.push(("Layers", s.layers.to_string()));
+                tiles.push(("Macros", format!("{} · {} bytes", s.macro_count, s.macro_size)));
+            }
+            let action = if def.is_some() { "Replace VIA definition…" } else { "Import VIA definition…" };
+            import = self.about_device_card(ui, &tiles, Some(action));
             if self.firmware_source(i).is_some() {
                 self.firmware_card(ui);
             }
@@ -1211,45 +1225,18 @@ impl OpenPeriphApp {
                 return;
             };
             let snap = q.snap.clone();
-            ui.columns(2, |cols| {
-                card(&mut cols[0], |ui| {
-                    ui.label(theme::title("Keyboard"));
-                    ui.add_space(4.0);
-                    let row = |ui: &mut Ui, a: &str, b: String| {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(a).color(TEXT_DIM));
-                            ui.label(b);
-                        });
-                    };
-                    row(ui, "USB id", format!("{:04X}:{:04X}", info.vendor_id, info.product_id));
-                    row(ui, "Definition", def.map(|d| d.name.clone()).unwrap_or_else(|| "none (import one for the keymap)".into()));
-                    if let Some(s) = &snap {
-                        row(ui, "VIA protocol", s.protocol.to_string());
-                        row(ui, "Layers", s.layers.to_string());
-                        row(ui, "Macros", format!("{} ({} bytes)", s.macro_count, s.macro_size));
-                        if let Some(f) = s.firmware.filter(|f| *f != 0) {
-                            row(ui, "Firmware version", format!("{f:#010x}"));
-                        }
+            card(ui, |ui| {
+                ui.label(theme::title("Backup"));
+                ui.label(RichText::new("Saves the keymap, macros and lighting to a file (VIA can read it too), or puts a saved file back.").color(TEXT_DIM));
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let ok = connected && snap.is_some() && def.is_some();
+                    if ui.add_enabled(ok, egui::Button::new("Save to file…")).clicked() {
+                        save_backup = true;
                     }
-                    ui.add_space(6.0);
-                    if ui.button(if def.is_some() { "Replace VIA definition…" } else { "Import VIA definition…" }).clicked() {
-                        import = true;
+                    if ui.add_enabled(ok, egui::Button::new("Load from file…")).clicked() {
+                        load_backup = true;
                     }
-                });
-                card(&mut cols[1], |ui| {
-                    ui.label(theme::title("Backup"));
-                    ui.label(
-                        RichText::new("Saves the keymap, macros and lighting to a file (compatible with VIA's Save + Load), or puts a saved file back.").color(TEXT_DIM),
-                    );
-                    ui.horizontal(|ui| {
-                        let ok = connected && snap.is_some() && def.is_some();
-                        if ui.add_enabled(ok, egui::Button::new("Save to file…")).clicked() {
-                            save_backup = true;
-                        }
-                        if ui.add_enabled(ok, egui::Button::new("Load from file…")).clicked() {
-                            load_backup = true;
-                        }
-                    });
                 });
             });
             ui.add_space(10.0);

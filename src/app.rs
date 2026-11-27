@@ -489,6 +489,7 @@ impl OpenPeriphApp {
         match &self.install_kind {
             InstallKind::Pacman => "Downloads the new Arch package and installs it with pacman (asks for your password), then restarts OpenPeriph.",
             InstallKind::Replace(_) => "Downloads the new version, replaces this one and restarts OpenPeriph.",
+            InstallKind::WindowsSetup => "Downloads the new installer, installs it quietly and restarts OpenPeriph.",
             InstallKind::Manual => "This copy can't be replaced from here, so this opens the release page.",
         }
     }

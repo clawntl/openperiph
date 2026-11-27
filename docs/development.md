@@ -24,6 +24,14 @@ Options:
 
 Code is formatted with `cargo fmt` (see `rustfmt.toml`).
 
+The app icon (`assets/icons/`, `packaging/linux/openperiph.svg`) is drawn by
+`python3 tools/make_icons.py`. On Windows, `build.rs` puts it into `openperiph.exe`.
+
+The Windows installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6 from
+`packaging/windows/openperiph.iss`:
+`iscc /DAppVersion=0.5.0 packaging\windows\openperiph.iss` (after `cargo build --release`). It
+writes `dist\openperiph-setup-x64.exe`.
+
 ## Layout of the code
 
 | Path | What |
@@ -34,7 +42,7 @@ Code is formatted with `cargo fmt` (see `rustfmt.toml`).
 | `src/hid.rs` | HID on Windows and Linux (hidraw) |
 | `src/selfupdate.rs`, `src/net.rs` | Updates from GitHub |
 | `definitions/` | Bundled VIA definitions |
-| `packaging/` | Arch package, desktop file, udev rules |
+| `packaging/` | Arch package, Windows installer, desktop file, udev rules |
 
 ## Adding a device
 

@@ -8,3 +8,4 @@ Icon=openperiph
 Terminal=false
 Categories=Settings;HardwareSettings;Utility;
 Keywords=keyboard;mouse;QMK;VIA;keymap;RGB;lighting;firmware;
+StartupWMClass=openperiph

@@ -18,17 +18,13 @@ pub enum View {
     About,
 }
 
-/// Pictures read from disk (photos of devices), by name.
+/// Photos of devices that come with the app, loaded when first shown.
 #[derive(Default)]
 pub struct Pictures {
     loaded: HashMap<String, Option<egui::TextureHandle>>,
 }
 
 impl Pictures {
-    pub fn get(&mut self, ctx: &egui::Context, name: &str) -> Option<egui::TextureHandle> {
-        self.loaded.entry(name.to_string()).or_insert_with(|| store::picture(name).and_then(|p| theme::load_texture(ctx, &p).ok())).clone()
-    }
-
     /// A photo that comes with the app, for devices that have one.
     pub fn bundled(&mut self, ctx: &egui::Context, info: &crate::device::DeviceInfo) -> Option<egui::TextureHandle> {
         let (name, bytes): (&str, &'static [u8]) = match (info.id.as_str(), info.vendor_id, info.product_id) {
@@ -40,15 +36,6 @@ impl Pictures {
         let key = format!("bundled-{name}");
         self.loaded.entry(key.clone()).or_insert_with(|| theme::texture_from_bytes(ctx, &key, bytes)).clone()
     }
-
-    pub fn forget(&mut self, name: &str) {
-        self.loaded.remove(name);
-    }
-}
-
-/// The picture name of a device's photo.
-pub fn photo_name(id: &str) -> String {
-    format!("device-{id}")
 }
 
 impl OpenPeriphApp {
@@ -359,92 +346,82 @@ impl OpenPeriphApp {
     }
 
     // -----------------------------------------------------------------------------------------
-    // Device page for devices without firmware settings (picture, ids)
+    // "About this device": the picture, its name and a few facts as tiles
 
-    pub(super) fn device_settings_page(&mut self, ui: &mut Ui) {
-        let info = self.devices[self.selected].driver.info().clone();
+    /// Returns true when `action` (a small button under the tiles) was clicked.
+    pub(super) fn about_device_card(&mut self, ui: &mut Ui, tiles: &[(&str, String)], action: Option<&str>) -> bool {
+        let i = self.selected;
+        let info = self.devices[i].driver.info().clone();
+        let ctx = ui.ctx().clone();
+        let mut clicked = false;
+        let what = if self.devices[i].driver.capabilities().qmk { "QMK keyboard" } else { info.kind.name() };
         theme::card(ui, |ui| {
-            ui.label(title("About this device"));
-            ui.add_space(4.0);
-            egui::Grid::new("devinfo").num_columns(2).spacing([16.0, 6.0]).show(ui, |ui| {
-                ui.label(dim("Name"));
-                ui.label(&info.name);
-                ui.end_row();
-                ui.label(dim("Made by"));
-                ui.label(&info.maker);
-                ui.end_row();
-                ui.label(dim("USB id"));
-                ui.label(format!("{:04X}:{:04X}", info.vendor_id, info.product_id));
-                ui.end_row();
-                if let Some(fw) = self.devices[self.selected].mouse_status.firmware.clone() {
-                    ui.label(dim("Firmware"));
-                    ui.label(fw);
-                    ui.end_row();
+            let wide = ui.available_width() > 640.0;
+            let mut body = |ui: &mut Ui| {
+                ui.label(RichText::new(&info.name).size(18.0).family(theme::semibold()).color(TEXT));
+                ui.label(dim(format!("{} · {what}", info.maker)));
+                ui.add_space(10.0);
+                tile_grid(ui, tiles);
+                if let Some(a) = action {
+                    ui.add_space(8.0);
+                    clicked = ui.button(a).clicked();
                 }
-            });
+            };
+            // the picture first (needs self mutably), then the text beside or under it
+            let size = if wide { Vec2::new(260.0, 150.0) } else { Vec2::new(ui.available_width(), 130.0) };
+            if wide {
+                ui.horizontal_top(|ui| {
+                    let (art, _) = ui.allocate_exact_size(size, Sense::hover());
+                    let p = ui.painter().clone();
+                    p.circle_filled(art.center(), 70.0, ACCENT.gamma_multiply(0.04));
+                    self.device_art(&ctx, &p, i, art.shrink(8.0), true);
+                    ui.add_space(14.0);
+                    ui.vertical(|ui| body(ui));
+                });
+            } else {
+                let (art, _) = ui.allocate_exact_size(size, Sense::hover());
+                let p = ui.painter().clone();
+                self.device_art(&ctx, &p, i, art.shrink(8.0), true);
+                body(ui);
+            }
         });
         ui.add_space(10.0);
-        self.picture_card(ui);
+        clicked
     }
 
-    /// Choose a photo of the device, instead of the drawing.
-    pub(super) fn picture_card(&mut self, ui: &mut Ui) {
-        let i = self.selected;
-        let id = self.devices[i].driver.info().id.clone();
-        let name = photo_name(&id);
-        let ctx = ui.ctx().clone();
-        let has_photo = self.pictures.get(&ctx, &name).is_some();
-        let mut pick = false;
-        let mut clear = false;
-        theme::card(ui, |ui| {
-            ui.label(title("Picture"));
-            ui.label(dim("How this device is shown. You can use a photo of your own instead."));
-            ui.add_space(8.0);
-            ui.horizontal_top(|ui| {
-                let (r, _) = ui.allocate_exact_size(Vec2::new(300.0, 150.0), Sense::hover());
-                let p = ui.painter().clone();
-                p.add(glass(&ctx, r, 10.0, Glass::Inset));
-                self.device_art(&ctx, &p, i, r.shrink(12.0), true);
-                ui.add_space(12.0);
-                ui.vertical(|ui| {
-                    if ui.button("Use a photo…").clicked() {
-                        pick = true;
-                    }
-                    if ui.add_enabled(has_photo, egui::Button::new("Use the default")).clicked() {
-                        clear = true;
-                    }
-                    ui.add_space(4.0);
-                    ui.label(small("PNG, JPEG or WebP. A picture with a transparent or dark background looks best."));
-                });
-            });
-        });
-        if pick {
-            if let Some(path) = rfd::FileDialog::new().add_filter("Pictures", &["png", "jpg", "jpeg", "webp"]).set_title("Photo of the device").pick_file() {
-                match store::keep_picture(&name, &path) {
-                    Ok(_) => {
-                        self.pictures.forget(&name);
-                        self.set_status("Picture saved.".into(), true);
-                    }
-                    Err(e) => self.set_status(e, false),
-                }
+    /// The Device page for devices without firmware settings.
+    pub(super) fn device_settings_page(&mut self, ui: &mut Ui) {
+        let d = &self.devices[self.selected];
+        let info = d.driver.info().clone();
+        let connected = d.connected == Some(true);
+        let st = d.mouse_status.clone();
+        let mouse = d.driver.capabilities().mouse;
+        let mut tiles: Vec<(&str, String)> = vec![("USB id", format!("{:04X}:{:04X}", info.vendor_id, info.product_id))];
+        tiles.push((
+            "Connection",
+            match (connected, mouse, st.wired) {
+                (false, _, _) => "Not plugged in".into(),
+                (true, true, true) => "Cable".into(),
+                (true, true, false) => "Receiver".into(),
+                (true, false, _) => "USB".into(),
+            },
+        ));
+        if mouse {
+            if let Some(b) = st.battery {
+                tiles.push(("Battery", if st.charging { format!("{b}% · charging") } else { format!("{b}%") }));
             }
         }
-        if clear {
-            store::remove_picture(&name);
-            self.pictures.forget(&name);
+        if let Some(fw) = st.firmware.clone() {
+            tiles.push(("Firmware", fw));
         }
+        self.about_device_card(ui, &tiles, None);
     }
 
     // -----------------------------------------------------------------------------------------
     // Pictures of the hardware
 
-    /// A photo of the device if you chose one, otherwise the bundled photo or a drawing of it.
+    /// The device's photo if the app has one, otherwise a drawing of it.
     pub(super) fn device_art(&mut self, ctx: &egui::Context, p: &egui::Painter, i: usize, rect: Rect, legends: bool) {
-        let id = self.devices[i].driver.info().id.clone();
-        if let Some(tex) = self.pictures.get(ctx, &photo_name(&id)) {
-            theme::photo(p, rect, &tex);
-            return;
-        }
         let info = self.devices[i].driver.info().clone();
         if let Some(tex) = self.pictures.bundled(ctx, &info) {
             theme::photo(p, rect, &tex);
@@ -626,17 +603,21 @@ impl OpenPeriphApp {
 // Widgets
 
 fn logo(p: &egui::Painter, r: Rect) {
+    // the same as the app icon: a ring from green (top left) to blue (bottom right), and a dot
     let c = r.center();
-    let rad = r.width() / 2.0 - 1.0;
-    // a ring that fades from green to blue, and a dot
-    let n = 40;
+    let rad = r.width() * 0.36;
+    let n = 48;
     for k in 0..n {
-        let a0 = (k as f32 / n as f32) * std::f32::consts::TAU - 1.2;
-        let a1 = ((k + 1) as f32 / n as f32) * std::f32::consts::TAU - 1.2;
-        let col = theme::lerp_colour(ACCENT, SECOND, k as f32 / n as f32);
-        p.line_segment([c + Vec2::angled(a0) * rad, c + Vec2::angled(a1) * rad], Stroke::new(2.6, col));
+        let a0 = k as f32 / n as f32 * std::f32::consts::TAU;
+        let a1 = (k + 1) as f32 / n as f32 * std::f32::consts::TAU;
+        let mid = Vec2::angled((a0 + a1) / 2.0);
+        let t = ((mid.x + mid.y) / 2.0_f32.sqrt() * 0.5 + 0.5).clamp(0.0, 1.0);
+        let col = theme::lerp_colour(ACCENT, SECOND, t);
+        p.line_segment([c + Vec2::angled(a0) * rad, c + Vec2::angled(a1) * rad], Stroke::new(r.width() * 0.17, col));
     }
-    p.circle_filled(c + Vec2::new(rad * 0.62, -rad * 0.62), 2.6, Color32::WHITE);
+    let dot = c + Vec2::angled(-std::f32::consts::FRAC_PI_4) * rad;
+    p.circle_filled(dot, r.width() * 0.17, theme::BG1);
+    p.circle_filled(dot, r.width() * 0.11, Color32::WHITE);
 }
 
 /// A tab in the top bar: icon and name, underlined when open.
@@ -733,4 +714,38 @@ fn generic_keys() -> Vec<ArtKey> {
         }
     }
     keys
+}
+
+/// Facts as tiles: a small caption over a value, two to four to a row.
+fn tile_grid(ui: &mut Ui, tiles: &[(&str, String)]) {
+    let gap = 8.0;
+    let avail = ui.available_width();
+    let per_row = ((avail + gap) / (150.0 + gap)).floor().clamp(1.0, 4.0) as usize;
+    let w = (avail - gap * (per_row as f32 - 1.0)) / per_row as f32;
+    for row in tiles.chunks(per_row) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for (caption, value) in row {
+                let (r, resp) = ui.allocate_exact_size(Vec2::new(w, 54.0), Sense::hover());
+                let p = ui.painter();
+                p.rect_filled(r, CornerRadius::same(9), Color32::from_white_alpha(6));
+                p.rect_stroke(r, CornerRadius::same(9), Stroke::new(1.0, Color32::from_white_alpha(12)), StrokeKind::Inside);
+                p.text(r.min + Vec2::new(12.0, 10.0), Align2::LEFT_TOP, caption.to_uppercase(), FontId::proportional(10.5), TEXT_MUT);
+                let font = FontId::new(14.0, theme::semibold());
+                let g = p.layout_no_wrap(value.clone(), font.clone(), TEXT);
+                let shown = if g.size().x > w - 24.0 {
+                    resp.on_hover_text(value.as_str());
+                    let mut t: String = value.chars().collect();
+                    while !t.is_empty() && p.layout_no_wrap(format!("{t}…"), font.clone(), TEXT).size().x > w - 24.0 {
+                        t.pop();
+                    }
+                    format!("{t}…")
+                } else {
+                    value.clone()
+                };
+                p.text(r.min + Vec2::new(12.0, 28.0), Align2::LEFT_TOP, shown, font, TEXT);
+            }
+        });
+        ui.add_space(gap - 6.0);
+    }
 }

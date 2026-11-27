@@ -39,7 +39,15 @@ fn main() -> eframe::Result<()> {
         }
     }
 
-    let mut viewport = egui::ViewportBuilder::default().with_title("OpenPeriph").with_inner_size([1240.0, 780.0]).with_min_inner_size([980.0, 640.0]);
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("OpenPeriph")
+        .with_inner_size([1240.0, 780.0])
+        .with_min_inner_size([980.0, 640.0])
+        // matches openperiph.desktop, so Linux desktops show the menu entry's icon
+        .with_app_id("openperiph");
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icons/openperiph.png")) {
+        viewport = viewport.with_icon(std::sync::Arc::new(icon));
+    }
     if screenshot.is_some() {
         // Open quietly behind other windows so a check never gets in the way.
         viewport = viewport.with_active(false);

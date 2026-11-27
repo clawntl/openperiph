@@ -221,8 +221,6 @@ pub enum Glass {
     Panel,
     /// Cards on a page.
     Card,
-    /// Something inside a card.
-    Inset,
 }
 
 /// A frosted-glass rounded rectangle.
@@ -231,12 +229,11 @@ pub fn glass(ctx: &egui::Context, rect: Rect, radius: f32, kind: Glass) -> Shape
     let (top, bottom, alpha) = match kind {
         Glass::Panel => (BG1, BG1, 190u8),
         Glass::Card => (BG2, BG1, 168),
-        Glass::Inset => (BG3, BG2, 150),
     };
     let pts = rounded_points(rect, radius);
     let mut shapes = Vec::new();
     match &b {
-        Some(b) if b.screen.is_positive() && !matches!(kind, Glass::Inset) => {
+        Some(b) if b.screen.is_positive() => {
             let mut mesh = Mesh::with_texture(b.blurred.id());
             let uv_of = |p: Pos2| {
                 let t = (p - b.screen.min) / b.screen.size();
@@ -247,7 +244,7 @@ pub fn glass(ctx: &egui::Context, rect: Rect, radius: f32, kind: Glass) -> Shape
         }
         _ => {}
     }
-    let alpha = if b.is_none() && !matches!(kind, Glass::Inset) { 255 } else { alpha };
+    let alpha = if b.is_none() { 255 } else { alpha };
     let mut tint = Mesh::default();
     fan(&mut tint, rect.center(), &pts, |p| {
         let t = ((p.y - rect.min.y) / rect.height().max(1.0)).clamp(0.0, 1.0);
@@ -478,15 +475,6 @@ pub fn texture_from_bytes(ctx: &egui::Context, name: &str, bytes: &[u8]) -> Opti
     let rgba = image::load_from_memory(bytes).ok()?.to_rgba8();
     let image = egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
     Some(ctx.load_texture(name, image, TextureOptions::LINEAR))
-}
-
-/// A picture to show as a texture (for photos of devices).
-pub fn load_texture(ctx: &egui::Context, path: &std::path::Path) -> Result<TextureHandle, String> {
-    let img = image::open(path).map_err(|e| format!("Couldn't read {}: {e}", path.display()))?;
-    let img = if img.width() > 1200 { img.resize(1200, 1200 * img.height() / img.width().max(1), image::imageops::FilterType::Triangle) } else { img };
-    let rgba = img.to_rgba8();
-    let image = egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
-    Ok(ctx.load_texture(path.display().to_string(), image, TextureOptions::LINEAR))
 }
 
 // ---------------------------------------------------------------------------------------------
