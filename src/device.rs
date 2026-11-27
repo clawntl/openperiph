@@ -115,6 +115,8 @@ pub struct LayoutKey {
     pub rect: [f32; 4],
     /// Can't be changed (for example the Fn key).
     pub locked: bool,
+    /// A second part of the same key, for ISO Enter's lower half.
+    pub second: Option<[f32; 4]>,
 }
 
 #[derive(Clone, Debug, Default)]

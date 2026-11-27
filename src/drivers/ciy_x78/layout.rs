@@ -159,6 +159,11 @@ pub const DEFAULT_FN: &[(u8, u32, &str)] = &[
 ];
 
 /// Bounding box of the whole layout, in layout units.
+/// ISO Enter is two rectangles: the top one in the `[KEY]` line above, and this lower part
+/// (1.25 keys wide, under the top's right edge, between `#~` and the edge of the main block).
+pub const ENTER_ID: u8 = 63;
+pub const ENTER_LOWER: [f32; 4] = [537., 152., 574., 188.];
+
 pub const LAYOUT_W: f32 = 682.0;
 pub const LAYOUT_H: f32 = 236.0;
 

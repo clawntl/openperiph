@@ -721,9 +721,15 @@ impl OpenPeriphApp {
         let origin = area.center() - size / 2.0;
         let mut clicked = None;
         for k in &layout.keys {
-            let r = Rect::from_min_max(origin + Vec2::new(k.rect[0], k.rect[1]) * scale, origin + Vec2::new(k.rect[2], k.rect[3]) * scale).shrink(1.0);
+            let to_screen = |q: [f32; 4]| Rect::from_min_max(origin + Vec2::new(q[0], q[1]) * scale, origin + Vec2::new(q[2], q[3]) * scale).shrink(1.0);
+            let r = to_screen(k.rect);
+            let lower = k.second.map(to_screen);
             let id = ui.scope_id().with(("key", k.id));
-            let resp = ui.interact(r, id, if k.locked { Sense::hover() } else { Sense::click() });
+            let sense = if k.locked { Sense::hover() } else { Sense::click() };
+            let mut resp = ui.interact(r, id, sense);
+            if let Some(l) = lower {
+                resp = resp.union(ui.interact(l, id.with("lower"), sense));
+            }
             let action = map.get(&k.id).copied().unwrap_or_default();
             let custom = action != KeyAction::Default;
             let selected = self.selected_key == Some(k.id);
@@ -736,10 +742,35 @@ impl OpenPeriphApp {
             }
             let p = ui.painter();
             p.rect_filled(r, CornerRadius::same(5), fill);
-            if selected {
-                p.rect_stroke(r, CornerRadius::same(5), Stroke::new(2.0, ACCENT), StrokeKind::Outside);
-            } else if custom {
-                p.rect_stroke(r, CornerRadius::same(5), Stroke::new(1.0, ACCENT.gamma_multiply(0.7)), StrokeKind::Inside);
+            if let Some(l) = lower {
+                p.rect_filled(l, CornerRadius::same(5), fill);
+            }
+            let outline = match (selected, custom) {
+                (true, _) => Some(Stroke::new(2.0, ACCENT)),
+                (false, true) => Some(Stroke::new(1.0, ACCENT.gamma_multiply(0.7))),
+                _ => None,
+            };
+            if let Some(stroke) = outline {
+                match lower {
+                    // ISO Enter: one L-shaped outline around both parts
+                    Some(l) => {
+                        let pts = vec![
+                            r.left_top(),
+                            Pos2::new(r.max.x.max(l.max.x), r.min.y),
+                            Pos2::new(r.max.x.max(l.max.x), l.max.y),
+                            l.left_bottom(),
+                            Pos2::new(l.min.x, r.max.y),
+                            r.left_bottom(),
+                        ];
+                        p.add(egui::Shape::closed_line(pts, stroke));
+                    }
+                    None if selected => {
+                        p.rect_stroke(r, CornerRadius::same(5), stroke, StrokeKind::Outside);
+                    }
+                    None => {
+                        p.rect_stroke(r, CornerRadius::same(5), stroke, StrokeKind::Inside);
+                    }
+                }
             }
             let fs = (10.5 * scale).clamp(8.0, 13.0);
             if custom {
@@ -1427,7 +1458,9 @@ fn preview(ui: &mut Ui, l: &LightingState, info: &crate::device::EffectInfo, dri
     let bright = level.map(|b| b as f32 / driver.max_brightness() as f32).unwrap_or(1.0);
     let t = ui.input(|i| i.time) as f32;
     for k in &layout.keys {
-        let r = Rect::from_min_max(rect.min + Vec2::new(k.rect[0], k.rect[1]) * scale, rect.min + Vec2::new(k.rect[2], k.rect[3]) * scale).shrink(0.8);
+        let to_screen = |q: [f32; 4]| Rect::from_min_max(rect.min + Vec2::new(q[0], q[1]) * scale, rect.min + Vec2::new(q[2], q[3]) * scale).shrink(0.8);
+        let r = to_screen(k.rect);
+        let lower = k.second.map(to_screen);
         let x = k.rect[0] / layout.width;
         let colour = if info.off {
             Color32::from_rgb(40, 42, 48)
@@ -1445,6 +1478,9 @@ fn preview(ui: &mut Ui, l: &LightingState, info: &crate::device::EffectInfo, dri
         };
         let c = if info.off { colour } else { colour.gamma_multiply(0.25 + 0.75 * bright) };
         p.rect_filled(r, CornerRadius::same(2), c);
+        if let Some(l) = lower {
+            p.rect_filled(l, CornerRadius::same(2), c);
+        }
     }
     if !info.off {
         ui.ctx().request_repaint_after(Duration::from_millis(50));

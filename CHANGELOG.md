@@ -5,6 +5,7 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- CIY X78: the Enter key is drawn as the ISO Enter it is (L-shaped, over two rows).
 - CIY X78: **Any colour** on the Lighting page: the whole keyboard in any colour (colour picker,
   hex box, presets, brightness). Stored in the keyboard's colour group M5; M1–M4 aren't touched.
 - Attack Shark R5 ULTRA: with only the receiver plugged in, the mouse is shown only while it's

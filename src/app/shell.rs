@@ -477,7 +477,11 @@ impl OpenPeriphApp {
         let keys = layout
             .keys
             .iter()
-            .map(|k| ArtKey { rect: Rect::from_min_max(Pos2::new(k.rect[0], k.rect[1]), Pos2::new(k.rect[2], k.rect[3])), second: None, label: k.label.to_string() })
+            .map(|k| ArtKey {
+                rect: Rect::from_min_max(Pos2::new(k.rect[0], k.rect[1]), Pos2::new(k.rect[2], k.rect[3])),
+                second: k.second.map(|s| Rect::from_min_max(Pos2::new(s[0], s[1]), Pos2::new(s[2], s[3]))),
+                label: k.label.to_string(),
+            })
             .collect();
         (keys, None)
     }

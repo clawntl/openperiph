@@ -10,7 +10,7 @@ use crate::device::*;
 use crate::hid;
 use crate::keycodes::{media_name, vk_to_usage, KeyAction, MouseAction};
 
-use layout::{key_by_id, DEFAULT_FN, FN_KEY_ID, KEYS, LAYOUT_H, LAYOUT_W};
+use layout::{key_by_id, DEFAULT_FN, ENTER_ID, ENTER_LOWER, FN_KEY_ID, KEYS, LAYOUT_H, LAYOUT_W};
 
 const VID: u16 = 0x258A;
 const PID: u16 = 0x0016;
@@ -75,6 +75,10 @@ impl CiyX78 {
                 label: k.label,
                 rect: [k.rect[0] - GROW - OX, k.rect[1] - GROW - OY, k.rect[2] + GROW - OX, k.rect[3] + GROW - OY],
                 locked: k.id == FN_KEY_ID,
+                second: (k.id == ENTER_ID).then(|| {
+                    let r = ENTER_LOWER;
+                    [r[0] - GROW - OX, r[1] - GROW - OY, r[2] + GROW - OX, r[3] + GROW - OY]
+                }),
             })
             .collect();
         CiyX78 {
