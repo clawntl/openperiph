@@ -1,6 +1,6 @@
 [package]
 name = "openperiph"
-version = "1.0.0"
+version = "0.4.0"
 edition = "2021"
 description = "Open settings app for PC peripherals (QMK/VIA keyboards, CIY X78 keyboard, Attack Shark R5 ULTRA mouse) without the vendor software, for Windows and Linux"
 
