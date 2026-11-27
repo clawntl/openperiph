@@ -1,4 +1,5 @@
 name: Release
+run-name: Release (${{ inputs.bump }})
 
 # Actions tab -> Release -> Run workflow. Raises the version in Cargo.toml (patch, minor or
 # major), commits it to main, builds everything and publishes the release.
