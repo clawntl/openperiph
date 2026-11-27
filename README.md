@@ -16,8 +16,8 @@ directly: through Windows' own HID functions, or Linux's hidraw devices.
 How each device's messages work, and where every value came from, is written down in
 [MECHANICS.md](MECHANICS.md).
 
-Only devices that are plugged in are listed on the left. **About & supported devices** (bottom
-left) shows the version, updates and this list.
+Each plugged-in device gets a tab along the top and a card on the Home page. The ⓘ button (top
+right) opens About: the version, updates, the background and this list of supported devices.
 
 QMK keyboards are changed the way VIA changes them: every edit is saved on the keyboard straight
 away, so there's no Apply button for them, and nothing has to stay running afterwards.
@@ -34,7 +34,7 @@ target\release\openperiph.exe      # Windows
 ```
 
 Options: `--demo` adds a simulated QMK keyboard (an SK620) to try the QMK pages without one.
-`--screenshot <file.png> [--page keys|lighting|colour|macros|settings|mouse|about|fw-update|app-update|flashing]` opens the window quietly,
+`--screenshot <file.png> [--page home|keys|lighting|colour|macros|settings|mouse|mouse-device|x78|x78-lighting|about|fw-update|app-update|flashing]` opens the window quietly,
 draws it, saves a picture and exits.
 
 ## Firmware updates (SK620)
@@ -54,7 +54,7 @@ After that, every update works from here.
 ## Updating OpenPeriph
 
 When it starts, OpenPeriph asks GitHub for its newest release. If there is a newer one, **Update
-OpenPeriph to …** appears at the bottom left, and a window asks whether to update now. It downloads the release, checks it against the
+OpenPeriph to …** appears at the top right (also on the About page), and a window asks whether to update now. It downloads the release, checks it against the
 SHA-256 GitHub lists for the file, installs it and restarts:
 
 - Arch package: installs the new package with `pacman -U` (through `pkexec`, so it asks for your
@@ -137,14 +137,19 @@ driver to `src/drivers/mod.rs`.
 
 ## Releases
 
-Every push to `main` is built by GitHub Actions. To publish a release, bump `version` in
-`Cargo.toml`, commit, then push a matching tag:
+Every push and pull request is tested and built for Windows, Linux and Arch by GitHub Actions.
 
-```
-git tag v0.1.0
-git push origin v0.1.0
-```
+To release:
 
-The Release workflow builds `openperiph.exe` for Windows, `openperiph` for Linux (x86-64) and the
-Arch package, and attaches them (plus a zip and a tar.gz) to a new GitHub release. It can also be
-run by hand from the Actions tab, which releases the version in `Cargo.toml`.
+1. Note what changed under **Unreleased** in [CHANGELOG.md](CHANGELOG.md) (it becomes the
+   release notes).
+2. On GitHub, open **Actions → Release → Run workflow**, pick **patch**, **minor** or **major**,
+   and run it.
+
+That raises the version in `Cargo.toml`, commits it to `main`, builds everything and publishes the
+release with `openperiph.exe`, the Linux program, the Arch package, a zip, a tar.gz and
+`SHA256SUMS`. Installed copies of OpenPeriph then offer the update when they start.
+
+You can also do it locally: `python3 tools/bump_version.py patch`, commit and push to `main`. Any
+push to `main` whose version has no release yet publishes it; one that's already released just
+builds.

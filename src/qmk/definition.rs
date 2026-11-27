@@ -118,17 +118,7 @@ impl Definition {
                     .collect()
             })
             .unwrap_or_default();
-        Ok(Definition {
-            name,
-            vendor_id,
-            product_id,
-            rows,
-            cols,
-            keys,
-            options,
-            menus,
-            custom_keycodes,
-        })
+        Ok(Definition { name, vendor_id, product_id, rows, cols, keys, options, menus, custom_keycodes })
     }
 
     /// Whether a key is shown with the chosen layout options.
@@ -151,12 +141,7 @@ impl Definition {
             if let Some((o, c)) = k.option {
                 if c != 0 {
                     // shift by the offset between this choice's keys and choice 0's keys
-                    let min = |ch: usize| {
-                        self.keys
-                            .iter()
-                            .filter(|q| q.option == Some((o, ch)))
-                            .fold((f32::MAX, f32::MAX), |(x, y), q| (x.min(q.x), y.min(q.y)))
-                    };
+                    let min = |ch: usize| self.keys.iter().filter(|q| q.option == Some((o, ch))).fold((f32::MAX, f32::MAX), |(x, y), q| (x.min(q.x), y.min(q.y)));
                     let (x0, y0) = min(0);
                     let (xc, yc) = min(c);
                     if x0 != f32::MAX && xc != f32::MAX {
@@ -263,12 +248,10 @@ fn parse_kle(rows: &[Value]) -> Result<Vec<Key>, String> {
                 Value::String(label) => {
                     if !decal {
                         let parts: Vec<&str> = label.split('\n').collect();
-                        let (row, col) = parse_pair(parts[0])
-                            .ok_or_else(|| format!("Key label \"{}\" isn't a matrix position like \"0,1\".", parts[0]))?;
+                        let (row, col) = parse_pair(parts[0]).ok_or_else(|| format!("Key label \"{}\" isn't a matrix position like \"0,1\".", parts[0]))?;
                         // the layout option sits in the bottom-right legend (index 3), or index 8
                         let option = parts.get(3).and_then(|s| parse_pair(s)).or_else(|| parts.get(8).and_then(|s| parse_pair(s)));
-                        let encoder = parts.get(9).map(|s| s.trim() == "e").unwrap_or(false)
-                            || parts.get(10).map(|s| s.trim() == "e").unwrap_or(false);
+                        let encoder = parts.get(9).map(|s| s.trim() == "e").unwrap_or(false) || parts.get(10).map(|s| s.trim() == "e").unwrap_or(false);
                         // rotate the key's centre about (rx, ry)
                         let (mut kx, mut ky) = (x, y);
                         if r != 0.0 {

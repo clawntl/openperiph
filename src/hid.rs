@@ -62,9 +62,7 @@ pub fn parse_descriptor(d: &[u8]) -> (Vec<DescCollection>, bool) {
     let mut numbered = false;
 
     let finish = |bits: &mut BTreeMap<(u8, u8), u32>, c: &mut DescCollection| {
-        let len = |kind: u8| {
-            bits.iter().filter(|((k, _), _)| *k == kind).map(|(_, b)| b.div_ceil(8) + 1).max().unwrap_or(0) as u16
-        };
+        let len = |kind: u8| bits.iter().filter(|((k, _), _)| *k == kind).map(|(_, b)| b.div_ceil(8) + 1).max().unwrap_or(0) as u16;
         c.input_len = len(0);
         c.output_len = len(1);
         c.feature_len = len(2);
@@ -155,23 +153,15 @@ mod imp {
 
     use windows_sys::core::GUID;
     use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-        SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW,
-        SetupDiGetDeviceInterfaceDetailW, DIGCF_DEVICEINTERFACE, DIGCF_PRESENT,
+        SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW, SetupDiGetDeviceInterfaceDetailW, DIGCF_DEVICEINTERFACE, DIGCF_PRESENT,
         SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA_W,
     };
     use windows_sys::Win32::Devices::HumanInterfaceDevice::{
-        HidD_FreePreparsedData, HidD_GetAttributes, HidD_GetFeature, HidD_GetHidGuid,
-        HidD_GetInputReport, HidD_GetManufacturerString, HidD_GetPreparsedData, HidD_GetProductString,
-        HidD_GetSerialNumberString, HidD_SetFeature, HidP_GetCaps, HIDD_ATTRIBUTES, HIDP_CAPS,
+        HidD_FreePreparsedData, HidD_GetAttributes, HidD_GetFeature, HidD_GetHidGuid, HidD_GetInputReport, HidD_GetManufacturerString, HidD_GetPreparsedData,
+        HidD_GetProductString, HidD_GetSerialNumberString, HidD_SetFeature, HidP_GetCaps, HIDD_ATTRIBUTES, HIDP_CAPS,
     };
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GetLastError, ERROR_IO_PENDING, GENERIC_READ, GENERIC_WRITE, HANDLE,
-        INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
-    };
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, ReadFile, WriteFile, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ, FILE_SHARE_WRITE,
-        OPEN_EXISTING,
-    };
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_IO_PENDING, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0};
+    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, ReadFile, WriteFile, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
     use windows_sys::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
     use windows_sys::Win32::System::IO::{CancelIo, GetOverlappedResult, OVERLAPPED};
 
@@ -203,9 +193,7 @@ mod imp {
 
     fn open_raw(path: &str, access: u32, flags: u32) -> Option<HANDLE> {
         let w = wide(path);
-        let h = unsafe {
-            CreateFileW(w.as_ptr(), access, FILE_SHARE_READ | FILE_SHARE_WRITE, null(), OPEN_EXISTING, flags, null_mut())
-        };
+        let h = unsafe { CreateFileW(w.as_ptr(), access, FILE_SHARE_READ | FILE_SHARE_WRITE, null(), OPEN_EXISTING, flags, null_mut()) };
         if h == INVALID_HANDLE_VALUE || h.is_null() {
             None
         } else {
@@ -221,8 +209,7 @@ mod imp {
 
     /// Open for input and output reports (and feature reports).
     pub fn open_io(path: &str) -> Result<Handle, String> {
-        let h = open_raw(path, GENERIC_READ | GENERIC_WRITE, FILE_FLAG_OVERLAPPED)
-            .ok_or("Couldn't open the device (is another app using it?).")?;
+        let h = open_raw(path, GENERIC_READ | GENERIC_WRITE, FILE_FLAG_OVERLAPPED).ok_or("Couldn't open the device (is another app using it?).")?;
         let event = unsafe { CreateEventW(null(), 1, 0, null()) };
         if event.is_null() {
             unsafe { CloseHandle(h) };
@@ -333,7 +320,9 @@ mod imp {
                 }
                 let path = String::from_utf16_lossy(std::slice::from_raw_parts(path_ptr, len));
 
-                let Some(h) = open_raw(&path, 0, 0) else { continue };
+                let Some(h) = open_raw(&path, 0, 0) else {
+                    continue;
+                };
                 let h = Handle { h, event: null_mut() };
                 let mut attrs: HIDD_ATTRIBUTES = zeroed();
                 attrs.Size = size_of::<HIDD_ATTRIBUTES>() as u32;
@@ -405,10 +394,7 @@ mod imp {
     }
 
     fn numbered(dev_path: &str) -> bool {
-        sys_dir(dev_path)
-            .and_then(|d| fs::read(d.join("report_descriptor")).ok())
-            .map(|d| parse_descriptor(&d).1)
-            .unwrap_or(false)
+        sys_dir(dev_path).and_then(|d| fs::read(d.join("report_descriptor")).ok()).map(|d| parse_descriptor(&d).1).unwrap_or(false)
     }
 
     fn open_file(path: &str) -> std::io::Result<fs::File> {
@@ -425,10 +411,9 @@ mod imp {
     pub fn open_io(path: &str) -> Result<Handle, String> {
         match open_file(path) {
             Ok(file) => Ok(Handle { file, numbered: numbered(path) }),
-            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => Err(
-                "No permission to use this device yet. Click \"Allow access\" (it adds a udev rule), then unplug and replug it."
-                    .into(),
-            ),
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                Err("No permission to use this device yet. Click \"Allow access\" (it adds a udev rule), then unplug and replug it.".into())
+            }
             Err(_) => Err("Couldn't open the device (is another app using it?).".into()),
         }
     }
@@ -476,7 +461,9 @@ mod imp {
     /// Every HID collection on the system; `filter` sees vendor and product id first.
     pub fn enumerate(filter: &dyn Fn(u16, u16) -> bool) -> Vec<Collection> {
         let mut out = Vec::new();
-        let Ok(dir) = fs::read_dir("/sys/class/hidraw") else { return out };
+        let Ok(dir) = fs::read_dir("/sys/class/hidraw") else {
+            return out;
+        };
         let mut nodes: Vec<_> = dir.flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         nodes.sort_by_key(|n| n.trim_start_matches("hidraw").parse::<u32>().unwrap_or(0));
         for node in nodes {
@@ -517,7 +504,9 @@ mod imp {
             if product.is_empty() {
                 product = name.clone();
             }
-            let Ok(desc) = fs::read(dev.join("report_descriptor")) else { continue };
+            let Ok(desc) = fs::read(dev.join("report_descriptor")) else {
+                continue;
+            };
             let (cols, _) = parse_descriptor(&desc);
             for c in cols {
                 out.push(Collection {
@@ -599,9 +588,7 @@ pub const UDEV_RULES: &str = "/etc/udev/rules.d/61-openperiph-local.rules";
 /// The rule line for one device.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn udev_rule(vid: u16, pid: u16) -> String {
-    format!(
-        "KERNEL==\"hidraw*\", ATTRS{{idVendor}}==\"{vid:04x}\", ATTRS{{idProduct}}==\"{pid:04x}\", MODE=\"0660\", TAG+=\"uaccess\""
-    )
+    format!("KERNEL==\"hidraw*\", ATTRS{{idVendor}}==\"{vid:04x}\", ATTRS{{idProduct}}==\"{pid:04x}\", MODE=\"0660\", TAG+=\"uaccess\"")
 }
 
 /// Adds rules for these devices (keeping existing ones) through pkexec, which asks for the
@@ -609,11 +596,7 @@ pub fn udev_rule(vid: u16, pid: u16) -> String {
 #[cfg(target_os = "linux")]
 pub fn install_udev_rules(ids: &[(u16, u16)]) -> Result<(), String> {
     let existing = std::fs::read_to_string(UDEV_RULES).unwrap_or_default();
-    let mut text = if existing.is_empty() {
-        "# OpenPeriph: let the signed-in user talk to these devices' HID interfaces\n".to_string()
-    } else {
-        existing.clone()
-    };
+    let mut text = if existing.is_empty() { "# OpenPeriph: let the signed-in user talk to these devices' HID interfaces\n".to_string() } else { existing.clone() };
     for &(v, p) in ids {
         let line = udev_rule(v, p);
         if !existing.contains(&line) {
@@ -629,11 +612,7 @@ pub fn install_udev_rules(ids: &[(u16, u16)]) -> Result<(), String> {
     }
     let tmp = std::env::temp_dir().join("openperiph-udev.rules");
     std::fs::write(&tmp, &text).map_err(|e| e.to_string())?;
-    let script = format!(
-        "install -m 0644 '{}' '{}' && udevadm control --reload && udevadm trigger --subsystem-match=hidraw",
-        tmp.display(),
-        UDEV_RULES
-    );
+    let script = format!("install -m 0644 '{}' '{}' && udevadm control --reload && udevadm trigger --subsystem-match=hidraw", tmp.display(), UDEV_RULES);
     let status = std::process::Command::new("pkexec")
         .args(["sh", "-c", &script])
         .status()
@@ -677,10 +656,7 @@ mod tests {
         ];
         let (cols, numbered) = parse_descriptor(&d);
         assert!(!numbered);
-        assert_eq!(
-            cols,
-            vec![DescCollection { usage_page: 0xFF60, usage: 0x61, input_len: 33, output_len: 33, feature_len: 0 }]
-        );
+        assert_eq!(cols, vec![DescCollection { usage_page: 0xFF60, usage: 0x61, input_len: 33, output_len: 33, feature_len: 0 }]);
     }
 
     /// Two top-level collections in one interface with report IDs (keyboard + consumer control).

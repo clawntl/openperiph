@@ -12,10 +12,7 @@ use std::sync::Arc;
 use crate::device::Driver;
 
 pub fn all() -> Vec<Arc<dyn Driver>> {
-    let mut v: Vec<Arc<dyn Driver>> = vec![
-        Arc::new(ciy_x78::CiyX78::new()),
-        Arc::new(attack_shark_r5::AttackSharkR5::new()),
-    ];
+    let mut v: Vec<Arc<dyn Driver>> = vec![Arc::new(ciy_x78::CiyX78::new()), Arc::new(attack_shark_r5::AttackSharkR5::new())];
     for d in crate::qmk::definition::BUNDLED.iter().filter_map(|t| crate::qmk::definition::Definition::parse(t).ok()) {
         let (vid, pid) = (d.vendor_id, d.product_id);
         // an imported definition for the same keyboard wins

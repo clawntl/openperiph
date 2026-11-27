@@ -62,8 +62,7 @@ const GET_RIPPLE: Frame = Frame(0x02, 0x01, 0x8A);
 const SET_RIPPLE: Frame = Frame(0x02, 0x01, 0x0A);
 
 /// Polling rate in Hz to its device code. Reads may also answer 0x10 for 1000 Hz.
-const POLL_CODES: [(u32, u8); 7] =
-    [(125, 0x08), (250, 0x04), (500, 0x02), (1000, 0x01), (2000, 0x20), (4000, 0x40), (8000, 0x80)];
+const POLL_CODES: [(u32, u8); 7] = [(125, 0x08), (250, 0x04), (500, 0x02), (1000, 0x01), (2000, 0x20), (4000, 0x40), (8000, 0x80)];
 
 fn poll_code(hz: u32) -> Option<u8> {
     POLL_CODES.iter().find(|(h, _)| *h == hz).map(|(_, c)| *c)
@@ -132,21 +131,10 @@ fn spec(wired: bool) -> MouseSpec {
         max_stages: STAGES,
         // DefaultDPIColors in the vendor's model list (ARGB): red, blue, green, magenta, yellow, white.
         stage_colours: vec![[255, 0, 0], [0, 0, 255], [0, 255, 0], [255, 0, 255], [255, 255, 0], [255, 255, 255]],
-        poll_rates: if wired {
-            vec![125, 250, 500, 1000]
-        } else {
-            vec![125, 250, 500, 1000, 2000, 4000, 8000]
-        },
+        poll_rates: if wired { vec![125, 250, 500, 1000] } else { vec![125, 250, 500, 1000, 2000, 4000, 8000] },
         lift_off: vec![(0x87, "0.7 mm"), (0x01, "1 mm"), (0x02, "2 mm")],
         debounce_max: 20,
-        sleep_options: vec![
-            (15, "15 s"),
-            (60, "1 min"),
-            (180, "3 min"),
-            (300, "5 min"),
-            (600, "10 min"),
-            (1800, "30 min"),
-        ],
+        sleep_options: vec![(15, "15 s"), (60, "1 min"), (180, "3 min"), (300, "5 min"), (600, "10 min"), (1800, "30 min")],
         angle_snap: true,
     }
 }
@@ -215,11 +203,7 @@ impl Link {
                 _ => return Err(Fail::Other("The mouse refused a setting.".into())),
             }
         }
-        Err(Fail::Other(if asleep {
-            "The mouse is asleep: move it to wake it, then try again.".into()
-        } else {
-            "The mouse didn't answer.".into()
-        }))
+        Err(Fail::Other(if asleep { "The mouse is asleep: move it to wake it, then try again.".into() } else { "The mouse didn't answer.".into() }))
     }
 
     fn get(&self, f: Frame, args: &[u8]) -> Result<[u8; REPORT_LEN], String> {
@@ -249,9 +233,7 @@ impl Driver for AttackSharkR5 {
     }
 
     fn detect(&self) -> bool {
-        [PID_CABLE, PID_RECEIVER]
-            .iter()
-            .any(|pid| hid::collections(VID, *pid).iter().any(|c| c.usage_page == USAGE_PAGE && c.usage == USAGE))
+        [PID_CABLE, PID_RECEIVER].iter().any(|pid| hid::collections(VID, *pid).iter().any(|c| c.usage_page == USAGE_PAGE && c.usage == USAGE))
     }
 
     fn usb_ids(&self) -> Vec<(u16, u16)> {
@@ -315,17 +297,11 @@ impl Driver for AttackSharkR5 {
         }
 
         progress("Sending DPI stages…");
-        let stages: Vec<u32> = st
-            .dpi_stages
-            .iter()
-            .take(STAGES)
-            .map(|d| (d / sp.dpi_step * sp.dpi_step).clamp(sp.dpi_min, sp.dpi_max))
-            .collect();
+        let stages: Vec<u32> = st.dpi_stages.iter().take(STAGES).map(|d| (d / sp.dpi_step * sp.dpi_step).clamp(sp.dpi_min, sp.dpi_max)).collect();
         if stages.is_empty() {
             return Err("Keep at least one DPI stage.".into());
         }
-        link.exchange(&dpi_request(pp, &stages), false)
-            .map_err(|_| "The mouse refused the DPI stages.".to_string())?;
+        link.exchange(&dpi_request(pp, &stages), false).map_err(|_| "The mouse refused the DPI stages.".to_string())?;
         let stage = st.active_stage.min(stages.len() - 1) as u8 + 1;
         link.set(SET_STAGE, &[pp, stage])?;
 

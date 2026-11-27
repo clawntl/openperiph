@@ -8,14 +8,14 @@ use std::sync::Arc;
 
 use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Ui, Vec2};
 
-use super::{card, pill, segment, tab_button, toggle, DeviceEntry, Msg, OpenPeriphApp, Tab, ACCENT, BAD, CARD, KEYCAP, TEXT_DIM};
+use super::{card, chip, pill, segment, theme, toggle, DeviceEntry, Msg, OpenPeriphApp, Tab, ACCENT, BAD, KEYCAP, TEXT_DIM};
 use crate::device::Driver;
 use crate::drivers::qmk::QmkDriver;
 use crate::hid;
 use crate::qmk::definition::{self, Definition};
+use crate::qmk::firmware::{self, Release};
 use crate::qmk::keycodes::{self, CustomKeycode, KC_NO, KC_TRNS, MOD_ALT, MOD_CTL, MOD_GUI, MOD_RIGHT, MOD_SFT, QK_KB, QK_MACRO};
 use crate::qmk::menus::{self, Control, ControlKind};
-use crate::qmk::firmware::{self, Release};
 use crate::qmk::{self, Event, Job, Snapshot};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -150,7 +150,9 @@ impl OpenPeriphApp {
         let access = self.devices[i].needs_access;
         let screenshot = self.screenshot_mode();
         let driver = self.devices[i].driver.clone();
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         if q.fw_busy.is_some() {
             return;
         }
@@ -187,7 +189,9 @@ impl OpenPeriphApp {
 
     pub(super) fn qmk_event(&mut self, i: usize, e: Event) {
         let name = self.devices[i].driver.info().name.clone();
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         match e {
             Event::Loaded(Ok(s)) => {
                 q.loading = false;
@@ -258,10 +262,14 @@ impl OpenPeriphApp {
 
     /// Looks up the newest release once per run (or again when `force`).
     fn firmware_check(&mut self, i: usize, force: bool) {
-        let Some(src) = self.firmware_source(i) else { return };
+        let Some(src) = self.firmware_source(i) else {
+            return;
+        };
         let demo = qmk_driver(&self.devices[i]).is_some_and(|d| d.demo);
         let screenshot = self.screenshot_mode();
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         if (q.fw_checked && !force) || q.fw_checking {
             return;
         }
@@ -296,7 +304,9 @@ impl OpenPeriphApp {
 
     pub(super) fn firmware_msg(&mut self, i: usize, m: FwMsg) {
         let name = self.devices[i].driver.info().name.clone();
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         match m {
             FwMsg::Latest(r) => {
                 q.fw_checking = false;
@@ -352,10 +362,14 @@ impl OpenPeriphApp {
 
     /// Starts an update from a release (`None` path) or a .bin file.
     fn start_update(&mut self, i: usize, file: Option<std::path::PathBuf>) {
-        let Some(src) = self.firmware_source(i) else { return };
+        let Some(src) = self.firmware_source(i) else {
+            return;
+        };
         let def = qmk_driver(&self.devices[i]).and_then(|d| d.definition());
         let raw_path = qmk_driver(&self.devices[i]).and_then(|d| d.find()).map(|c| c.path);
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         let release = q.fw_release.as_ref().and_then(|r| r.as_ref().ok()).cloned();
         if file.is_none() && release.is_none() {
             return;
@@ -399,17 +413,21 @@ impl OpenPeriphApp {
 
     fn firmware_card(&mut self, ui: &mut Ui) {
         let i = self.selected;
-        let Some(src) = self.firmware_source(i) else { return };
+        let Some(src) = self.firmware_source(i) else {
+            return;
+        };
         let connected = self.devices[i].connected == Some(true);
         let demo = qmk_driver(&self.devices[i]).is_some_and(|d| d.demo);
         let mut install = false;
         let mut install_file = false;
         let mut recheck = false;
         {
-            let Some(q) = self.devices[i].qmk.as_mut() else { return };
+            let Some(q) = self.devices[i].qmk.as_mut() else {
+                return;
+            };
             let installed = q.snap.as_ref().and_then(|s| s.firmware).unwrap_or(0);
             card(ui, |ui| {
-                ui.label(RichText::new("Firmware").size(16.0).strong().color(Color32::WHITE));
+                ui.label(theme::title("Firmware"));
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Installed").color(TEXT_DIM));
                     ui.label(if installed > 0 { firmware::version_text(installed) } else { "v1.0.0 or older (it doesn't report a version)".into() });
@@ -439,12 +457,16 @@ impl OpenPeriphApp {
                         recheck = true;
                     }
                 });
-                ui.label(RichText::new(format!("From github.com/{}. The keyboard restarts into its bootloader, is written and checked, then restarts.", src.repo)).size(12.0).color(TEXT_DIM));
+                ui.label(
+                    RichText::new(format!("From github.com/{}. The keyboard restarts into its bootloader, is written and checked, then restarts.", src.repo))
+                        .size(11.5)
+                        .color(TEXT_DIM),
+                );
                 ui.add_space(4.0);
                 if let Some((stage, f)) = &q.fw_busy {
                     super::progress_bar(ui, *f, stage);
                     ui.add_space(2.0);
-                    ui.label(RichText::new("Don't unplug the keyboard.").strong().color(super::WARN));
+                    ui.label(RichText::new("Don't unplug the keyboard.").color(super::WARN));
                     return;
                 }
                 let mut keep = !q.fw_discard;
@@ -456,7 +478,7 @@ impl OpenPeriphApp {
                     if let Some(r) = rel {
                         let newer = r.version > installed;
                         let label = if newer { format!("Update to {}", r.tag) } else { format!("Reinstall {}", r.tag) };
-                        let btn = egui::Button::new(RichText::new(label).strong().color(if newer { Color32::BLACK } else { Color32::WHITE }))
+                        let btn = egui::Button::new(RichText::new(label).family(theme::semibold()).color(if newer { Color32::BLACK } else { Color32::WHITE }))
                             .fill(if newer { ACCENT } else { KEYCAP });
                         if ui.add_enabled(connected && !demo, btn).clicked() {
                             install = true;
@@ -507,7 +529,7 @@ impl OpenPeriphApp {
     // -----------------------------------------------------------------------------------------
     // Tabs
 
-    fn qmk_tabs_available(&self) -> Vec<(Tab, &'static str)> {
+    pub(super) fn qmk_tabs_available(&self) -> Vec<(Tab, &'static str)> {
         let d = &self.devices[self.selected];
         let q = d.qmk.as_ref();
         let snap = q.and_then(|q| q.snap.as_ref());
@@ -520,17 +542,6 @@ impl OpenPeriphApp {
         }
         v.push((Tab::Settings, "Settings"));
         v
-    }
-
-    pub(super) fn qmk_tabs(&mut self, ui: &mut Ui) {
-        let tabs = self.qmk_tabs_available();
-        ui.horizontal(|ui| {
-            for (t, name) in tabs {
-                if tab_button(ui, name, self.tab == t) {
-                    self.tab = t;
-                }
-            }
-        });
     }
 
     pub(super) fn qmk_fix_tab(&mut self) {
@@ -554,18 +565,20 @@ impl OpenPeriphApp {
         };
         if tab == Tab::Settings {
             self.qmk_settings_page(ui, def.as_deref());
+            ui.add_space(10.0);
+            self.picture_card(ui);
             return;
         }
         if !connected && !have {
             card(ui, |ui| {
-                ui.label(RichText::new("Plug in the keyboard").size(16.0).strong().color(Color32::WHITE));
+                ui.label(theme::title("Plug in the keyboard"));
                 ui.label(RichText::new("Its keymap, macros and lighting are read from the keyboard itself, so they show up once it is connected.").color(TEXT_DIM));
             });
             return;
         }
         if let Some(e) = error {
             card(ui, |ui| {
-                ui.label(RichText::new("Couldn't read the keyboard").size(16.0).strong().color(BAD));
+                ui.label(theme::title("Couldn't read the keyboard").color(BAD));
                 ui.label(RichText::new(e).color(TEXT_DIM));
                 if self.firmware_source(i).is_some() {
                     ui.label(RichText::new("Its firmware can be updated on the Settings page.").color(TEXT_DIM));
@@ -604,7 +617,9 @@ impl OpenPeriphApp {
             return;
         };
         let i = self.selected;
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         let Some(snap) = q.snap.as_ref() else { return };
         if snap.keymap.is_empty() {
             // read before the definition was known
@@ -632,12 +647,12 @@ impl OpenPeriphApp {
         let w = keys.iter().map(|k| k.x + k.w.max(k.second.map_or(0.0, |s| s[0] + s[2]))).fold(0.0f32, f32::max);
         let h = keys.iter().map(|k| k.y + k.h.max(k.second.map_or(0.0, |s| s[1] + s[3]))).fold(0.0f32, f32::max);
         let avail = ui.available_width();
-        let kb_h = (avail * 0.36).clamp(200.0, 340.0);
+        let kb_h = (avail * 0.3).clamp(190.0, 290.0);
         let mut clicked = None;
         let layer = q.layer;
         let keymap = &snap.keymap;
         let custom = def.custom_keycodes.clone();
-        egui::Frame::new().fill(CARD).corner_radius(CornerRadius::same(14)).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
+        card(ui, |ui| {
             let (area, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), kb_h), Sense::hover());
             let scale = (area.width() / w).min(area.height() / h);
             let origin = area.center() - Vec2::new(w, h) * scale / 2.0;
@@ -653,12 +668,12 @@ impl OpenPeriphApp {
                 let code = keymap.get(layer).and_then(|l| l.get(k.row as usize)).and_then(|r| r.get(k.col as usize)).copied().unwrap_or(0);
                 let selected = q.key == Some((k.row, k.col));
                 let mut fill = match code {
-                    KC_TRNS => Color32::from_rgb(36, 40, 48),
-                    KC_NO => Color32::from_rgb(30, 32, 38),
+                    KC_TRNS => Color32::from_rgb(24, 34, 28),
+                    KC_NO => Color32::from_rgb(20, 28, 23),
                     _ => KEYCAP,
                 };
                 if layer > 0 && code != KC_TRNS {
-                    fill = Color32::from_rgb(28, 74, 84);
+                    fill = Color32::from_rgb(30, 76, 50);
                 }
                 if resp.hovered() {
                     fill = fill.gamma_multiply(1.25);
@@ -701,7 +716,9 @@ impl OpenPeriphApp {
 
     fn qmk_key_editor(&mut self, ui: &mut Ui, def: &Definition, keys: &[definition::Key]) {
         let i = self.selected;
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         let Some((row, col)) = q.key else {
             ui.label(RichText::new("Pick a key above to change it.").color(TEXT_DIM));
             return;
@@ -716,7 +733,7 @@ impl OpenPeriphApp {
         let mut assign: Option<u16> = None;
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Layer {layer}, key {row},{col}")).size(18.0).strong().color(Color32::WHITE));
+            ui.label(theme::title(format!("Layer {layer}, key {row},{col}")));
             ui.add_space(12.0);
             ui.label(RichText::new(format!("{}  ({})", keycodes::describe(current, custom), keycodes::name(current))).color(TEXT_DIM));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -750,7 +767,10 @@ impl OpenPeriphApp {
                 let groups: [(&str, Vec<u16>); 7] = [
                     ("Letters", (0x04..=0x1D).collect()),
                     ("Numbers and symbols", (0x1E..=0x27).chain(0x2D..=0x38).chain([0x64]).collect()),
-                    ("Editing and navigation", vec![0x29, 0x28, 0x2A, 0x2B, 0x2C, 0x39, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50, 0x51, 0x52, 0x65]),
+                    (
+                        "Editing and navigation",
+                        vec![0x29, 0x28, 0x2A, 0x2B, 0x2C, 0x39, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50, 0x51, 0x52, 0x65],
+                    ),
                     ("Function keys", (0x3A..=0x45).chain(0x68..=0x73).collect()),
                     ("Modifiers", (0xE0..=0xE7).collect()),
                     ("Number pad", (0x53..=0x63).chain([0x67, 0x85, 0x86]).collect()),
@@ -877,7 +897,9 @@ impl OpenPeriphApp {
                 }
             }
             Picker::Any => {
-                ui.label(RichText::new("Type any QMK keycode: KC_A, MO(1), LT(2, KC_SPC), LCTL(KC_C), MT(MOD_LSFT, KC_Z), QK_BOOT or a number like 0x7C00.").color(TEXT_DIM));
+                ui.label(
+                    RichText::new("Type any QMK keycode: KC_A, MO(1), LT(2, KC_SPC), LCTL(KC_C), MT(MOD_LSFT, KC_Z), QK_BOOT or a number like 0x7C00.").color(TEXT_DIM),
+                );
                 ui.horizontal(|ui| {
                     let r = ui.add(egui::TextEdit::singleline(&mut q.any_text).hint_text("keycode").desired_width(260.0));
                     let parsed = keycodes::parse(&q.any_text, custom);
@@ -920,7 +942,7 @@ impl OpenPeriphApp {
     fn no_definition_card(&mut self, ui: &mut Ui) {
         let info = self.devices[self.selected].driver.info().clone();
         card(ui, |ui| {
-            ui.label(RichText::new("This keyboard needs its VIA definition").size(16.0).strong().color(Color32::WHITE));
+            ui.label(theme::title("This keyboard needs its VIA definition"));
             ui.label(
                 RichText::new(format!(
                     "QMK keyboards don't describe their own key positions, so the keymap needs the keyboard's VIA definition file (JSON). \
@@ -948,7 +970,10 @@ impl OpenPeriphApp {
                 let info = self.devices[i].driver.info().clone();
                 if (def.vendor_id, def.product_id) != (info.vendor_id, info.product_id) {
                     self.set_status(
-                        format!("That definition is for {:04X}:{:04X}, not this keyboard ({:04X}:{:04X}).", def.vendor_id, def.product_id, info.vendor_id, info.product_id),
+                        format!(
+                            "That definition is for {:04X}:{:04X}, not this keyboard ({:04X}:{:04X}).",
+                            def.vendor_id, def.product_id, info.vendor_id, info.product_id
+                        ),
                         false,
                     );
                     return;
@@ -976,7 +1001,9 @@ impl OpenPeriphApp {
 
     fn qmk_lighting_page(&mut self, ui: &mut Ui) {
         let i = self.selected;
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         let Some(snap) = q.snap.as_mut() else { return };
         let menus = snap.menus.clone();
         let mut changes: Vec<(u8, u8, Vec<u8>)> = Vec::new();
@@ -991,7 +1018,7 @@ impl OpenPeriphApp {
                     .collect();
                 card(ui, |ui| {
                     let title = if sec.label == m.label { m.label.clone() } else { format!("{} · {}", m.label, sec.label) };
-                    ui.label(RichText::new(title).size(16.0).strong().color(Color32::WHITE));
+                    ui.label(theme::title(title));
                     ui.add_space(6.0);
                     // Sliders and the colour first; long effect lists last.
                     let mut order: Vec<&Control> = sec.controls.iter().collect();
@@ -1043,7 +1070,9 @@ impl OpenPeriphApp {
     fn qmk_macros_page(&mut self, ui: &mut Ui, def: Option<&Definition>) {
         let custom: Vec<CustomKeycode> = def.map(|d| d.custom_keycodes.clone()).unwrap_or_default();
         let i = self.selected;
-        let Some(q) = self.devices[i].qmk.as_mut() else { return };
+        let Some(q) = self.devices[i].qmk.as_mut() else {
+            return;
+        };
         let Some(snap) = q.snap.as_ref() else { return };
         let count = snap.macro_count;
         let size = snap.macro_size;
@@ -1074,16 +1103,18 @@ impl OpenPeriphApp {
             let ui = &mut cols[1];
             card(ui, |ui| {
                 let n = q.macro_sel.min(count.saturating_sub(1));
-                ui.label(RichText::new(format!("Macro M{n}")).size(16.0).strong().color(Color32::WHITE));
+                ui.label(theme::title(format!("Macro M{n}")));
                 let edit = egui::TextEdit::multiline(&mut q.macro_edit[n]).font(egui::TextStyle::Monospace).desired_rows(6).desired_width(f32::INFINITY);
                 if ui.add(edit).changed() {
                     q.macro_dirty = true;
                     q.macro_error = None;
                 }
                 ui.label(
-                    RichText::new("Text is typed as written. {KC_ENT} taps a key, {KC_LCTL,KC_C} is a shortcut, {+KC_LSFT} / {-KC_LSFT} hold and release, {200} waits 200 ms.")
-                        .size(12.0)
-                        .color(TEXT_DIM),
+                    RichText::new(
+                        "Text is typed as written. {KC_ENT} taps a key, {KC_LCTL,KC_C} is a shortcut, {+KC_LSFT} / {-KC_LSFT} hold and release, {200} waits 200 ms.",
+                    )
+                    .size(12.0)
+                    .color(TEXT_DIM),
                 );
                 ui.horizontal(|ui| {
                     ui.label("Insert key");
@@ -1099,7 +1130,7 @@ impl OpenPeriphApp {
                 });
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    let save = egui::Button::new(RichText::new("Save macros").strong().color(if q.macro_dirty { Color32::BLACK } else { TEXT_DIM }))
+                    let save = egui::Button::new(RichText::new("Save macros").family(theme::semibold()).color(if q.macro_dirty { Color32::BLACK } else { TEXT_DIM }))
                         .fill(if q.macro_dirty { ACCENT } else { KEYCAP });
                     if ui.add_enabled(q.macro_dirty, save).clicked() {
                         match qmk::macros::encode(&q.macro_edit, &custom) {
@@ -1151,11 +1182,13 @@ impl OpenPeriphApp {
             if self.firmware_source(i).is_some() {
                 self.firmware_card(ui);
             }
-            let Some(q) = self.devices[i].qmk.as_mut() else { return };
+            let Some(q) = self.devices[i].qmk.as_mut() else {
+                return;
+            };
             let snap = q.snap.clone();
             ui.columns(2, |cols| {
                 card(&mut cols[0], |ui| {
-                    ui.label(RichText::new("Keyboard").size(16.0).strong().color(Color32::WHITE));
+                    ui.label(theme::title("Keyboard"));
                     ui.add_space(4.0);
                     let row = |ui: &mut Ui, a: &str, b: String| {
                         ui.horizontal(|ui| {
@@ -1179,8 +1212,10 @@ impl OpenPeriphApp {
                     }
                 });
                 card(&mut cols[1], |ui| {
-                    ui.label(RichText::new("Backup").size(16.0).strong().color(Color32::WHITE));
-                    ui.label(RichText::new("Saves the keymap, macros and lighting to a file (compatible with VIA's Save + Load), or puts a saved file back.").color(TEXT_DIM));
+                    ui.label(theme::title("Backup"));
+                    ui.label(
+                        RichText::new("Saves the keymap, macros and lighting to a file (compatible with VIA's Save + Load), or puts a saved file back.").color(TEXT_DIM),
+                    );
                     ui.horizontal(|ui| {
                         let ok = connected && snap.is_some() && def.is_some();
                         if ui.add_enabled(ok, egui::Button::new("Save to file…")).clicked() {
@@ -1197,7 +1232,7 @@ impl OpenPeriphApp {
             if let (Some(d), Some(s)) = (def, snap.as_ref()) {
                 if !d.options.is_empty() {
                     card(ui, |ui| {
-                        ui.label(RichText::new("Layout options").size(16.0).strong().color(Color32::WHITE));
+                        ui.label(theme::title("Layout options"));
                         ui.label(RichText::new("Which physical keys your keyboard has, where the PCB allows more than one.").color(TEXT_DIM));
                         let mut choices = d.unpack_options(s.layout_options);
                         let before = choices.clone();
@@ -1230,7 +1265,7 @@ impl OpenPeriphApp {
             }
 
             card(ui, |ui| {
-                ui.label(RichText::new("Reset").size(16.0).strong().color(Color32::WHITE));
+                ui.label(theme::title("Reset"));
                 ui.horizontal_wrapped(|ui| {
                     let defn = qmk_driver(&self.devices[i]).and_then(|d| d.definition());
                     let q = self.devices[i].qmk.as_mut().unwrap();
@@ -1263,10 +1298,16 @@ impl OpenPeriphApp {
 
     fn save_backup(&mut self) {
         let i = self.selected;
-        let Some(def) = qmk_driver(&self.devices[i]).and_then(|d| d.definition()) else { return };
-        let Some(snap) = self.devices[i].qmk.as_ref().and_then(|q| q.snap.clone()) else { return };
+        let Some(def) = qmk_driver(&self.devices[i]).and_then(|d| d.definition()) else {
+            return;
+        };
+        let Some(snap) = self.devices[i].qmk.as_ref().and_then(|q| q.snap.clone()) else {
+            return;
+        };
         let name = format!("{}.layout.json", def.name.replace(['/', '\\', ':'], "-"));
-        let Some(path) = rfd::FileDialog::new().add_filter("Keyboard layout", &["json"]).set_file_name(&name).save_file() else { return };
+        let Some(path) = rfd::FileDialog::new().add_filter("Keyboard layout", &["json"]).set_file_name(&name).save_file() else {
+            return;
+        };
         let text = serde_json::to_string_pretty(&qmk::backup(&def, &snap)).unwrap_or_default();
         match std::fs::write(&path, text) {
             Ok(()) => self.set_status(format!("Saved to {}.", path.display()), true),
@@ -1276,9 +1317,15 @@ impl OpenPeriphApp {
 
     fn load_backup(&mut self) {
         let i = self.selected;
-        let Some(def) = qmk_driver(&self.devices[i]).and_then(|d| d.definition()) else { return };
-        let Some(snap) = self.devices[i].qmk.as_ref().and_then(|q| q.snap.clone()) else { return };
-        let Some(path) = rfd::FileDialog::new().add_filter("Keyboard layout", &["json"]).pick_file() else { return };
+        let Some(def) = qmk_driver(&self.devices[i]).and_then(|d| d.definition()) else {
+            return;
+        };
+        let Some(snap) = self.devices[i].qmk.as_ref().and_then(|q| q.snap.clone()) else {
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new().add_filter("Keyboard layout", &["json"]).pick_file() else {
+            return;
+        };
         let job = std::fs::read_to_string(&path)
             .map_err(|e| e.to_string())
             .and_then(|t| serde_json::from_str::<qmk::Backup>(&t).map_err(|e| format!("Not a layout file: {e}")))
@@ -1334,11 +1381,7 @@ fn fit(s: &str, width: f32, font: f32) -> String {
 }
 
 fn group_items(groups: &[&str], custom: &[CustomKeycode]) -> Vec<(u16, String, String)> {
-    keycodes::all()
-        .iter()
-        .filter(|k| groups.contains(&k.group))
-        .map(|k| (k.code, keycodes::cap(k.code, custom).0, k.short.to_string()))
-        .collect()
+    keycodes::all().iter().filter(|k| groups.contains(&k.group)).map(|k| (k.code, keycodes::cap(k.code, custom).0, k.short.to_string())).collect()
 }
 
 /// A grid of keycode buttons; returns the one clicked.
@@ -1367,16 +1410,12 @@ fn basic_combo(ui: &mut Ui, id: &str, code: &mut u16) {
     if *code == 0 {
         *code = 0x04;
     }
-    egui::ComboBox::from_id_salt(id)
-        .selected_text(keycodes::cap(*code, &[]).0)
-        .height(320.0)
-        .width(140.0)
-        .show_ui(ui, |ui| {
-            for k in keycodes::all().iter().filter(|k| k.code <= 0xFF && (k.group == "basic" || k.group == "modifiers")) {
-                let label = keycodes::cap(k.code, &[]).0;
-                ui.selectable_value(code, k.code, format!("{label}   {}", k.short));
-            }
-        });
+    egui::ComboBox::from_id_salt(id).selected_text(keycodes::cap(*code, &[]).0).height(320.0).width(140.0).show_ui(ui, |ui| {
+        for k in keycodes::all().iter().filter(|k| k.code <= 0xFF && (k.group == "basic" || k.group == "modifiers")) {
+            let label = keycodes::cap(k.code, &[]).0;
+            ui.selectable_value(code, k.code, format!("{label}   {}", k.short));
+        }
+    });
 }
 
 /// Draws one menu control; returns the new value bytes when changed.
@@ -1405,10 +1444,7 @@ fn control(ui: &mut Ui, c: &Control, cur: &[u8]) -> Option<Vec<u8>> {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         for (label, val) in chunk {
                             let on = *val == v;
-                            let btn = egui::Button::new(RichText::new(label).color(if on { Color32::BLACK } else { Color32::WHITE }))
-                                .fill(if on { ACCENT } else { KEYCAP })
-                                .corner_radius(CornerRadius::same(8))
-                                .min_size(Vec2::new(w, 30.0));
+                            let btn = chip(label, on).min_size(Vec2::new(w, 28.0));
                             if ui.add(btn).clicked() && !on {
                                 out = Some(c.bytes(*val));
                             }
@@ -1518,7 +1554,17 @@ fn colour_picker(ui: &mut Ui, id: egui::Id, h: u8, s: u8) -> Option<(u8, u8)> {
     });
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
-        for (name, hh, ss) in [("Red", 0u8, 255u8), ("Orange", 21, 255), ("Yellow", 43, 255), ("Green", 85, 255), ("Cyan", 128, 255), ("Blue", 170, 255), ("Purple", 191, 255), ("Pink", 234, 200), ("White", 0, 0)] {
+        for (name, hh, ss) in [
+            ("Red", 0u8, 255u8),
+            ("Orange", 21, 255),
+            ("Yellow", 43, 255),
+            ("Green", 85, 255),
+            ("Cyan", 128, 255),
+            ("Blue", 170, 255),
+            ("Purple", 191, 255),
+            ("Pink", 234, 200),
+            ("White", 0, 0),
+        ] {
             let (rect, resp) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
             ui.painter().circle_filled(rect.center(), 10.0, hsv(hh, ss));
             if (h, s) == (hh, ss) {
@@ -1559,6 +1605,11 @@ fn parse_hex(text: &str) -> Option<(u8, u8)> {
         (r - g) / d + 4.0
     } / 6.0;
     Some(((hue * 255.0).round() as u8, (sat * 255.0).round() as u8))
+}
+
+/// QMK's hue/saturation as a colour (for drawings of the keyboard).
+pub(super) fn hsv_colour(h: u8, s: u8) -> Color32 {
+    hsv(h, s)
 }
 
 /// QMK's hue/saturation (0–255 each) at full brightness.

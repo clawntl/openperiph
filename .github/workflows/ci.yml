@@ -1,65 +1,161 @@
 name: Build
 
+# Every push and pull request: test and build for Windows, Linux and Arch.
+#
+# Releasing: when main has a Cargo.toml version that has no release yet, the same run publishes
+# it (notes from CHANGELOG.md). So a release is just a commit that raises the version, made by
+# hand or by the "Release" workflow (Actions tab -> Release -> Run workflow), which does the
+# bump for you and then runs this.
 on:
   push:
     branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build and release
+        type: string
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - id: v
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          release=false
+          # release from main, or when called by the Release workflow (which passes a commit)
+          if [[ -n "${{ inputs.ref }}" || ( "$GITHUB_REF" == "refs/heads/main" && "${{ github.event_name }}" != "pull_request" ) ]]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+              echo "v$version is already released."
+            else
+              echo "v$version has no release yet: this run publishes it."
+              release=true
+            fi
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            artifact: openperiph-windows-x64
-            file: target/release/openperiph.exe
-          - os: ubuntu-latest
-            artifact: openperiph-linux-x64
-            file: target/release/openperiph
+        os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
-
       - uses: Swatinem/rust-cache@v2
-
       - name: Test
         run: cargo test --release --locked
-
       - name: Build
         run: cargo build --release --locked
 
-      - name: Upload build
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.file }}
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "openperiph-v${{ needs.version.outputs.version }}-windows-x64"
+          New-Item -ItemType Directory dist, $name | Out-Null
+          Copy-Item target/release/openperiph.exe, README.md, MECHANICS.md $name
+          Compress-Archive -Path $name -DestinationPath "dist/$name.zip"
+          # the bare program, which the app's own updater downloads
+          Copy-Item target/release/openperiph.exe dist/openperiph.exe
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          name="openperiph-v${{ needs.version.outputs.version }}-linux-x64"
+          mkdir -p dist "$name"
+          cp target/release/openperiph README.md MECHANICS.md "$name/"
+          tar czf "dist/$name.tar.gz" "$name"
+          # the bare program, which the app's own updater downloads
+          cp target/release/openperiph dist/openperiph-linux-x64
 
-  arch-package:
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openperiph-${{ runner.os }}
+          path: dist/*
+
+  arch:
+    needs: version
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
       - name: Install build tools
         run: pacman -Syu --noconfirm --needed git rust libxkbcommon libglvnd hicolor-icon-theme
-
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - name: makepkg
         run: |
           useradd -m builder
           chown -R builder: .
-          su builder -c "cd packaging/arch && makepkg --noconfirm --nodeps"
-          ls -l packaging/arch/*.pkg.tar.zst
-
+          su builder -c "cd packaging/arch && makepkg --noconfirm --nodeps --nocheck"
       - name: Install it (checks the package is well-formed)
         run: pacman -U --noconfirm packaging/arch/openperiph-*.pkg.tar.zst && pacman -Ql openperiph
-
-      - name: Upload package
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
-          name: openperiph-arch-x86_64
+          name: openperiph-Arch
           path: packaging/arch/openperiph-*.pkg.tar.zst
+
+  release:
+    needs: [version, build, arch]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          # the CHANGELOG.md section for this version: from its "## v..." heading to the next
+          awk -v v="v$v" '/^## / { if (on) exit; on = ($2 == v); next } on' CHANGELOG.md > notes.md || true
+          grep -q '[^[:space:]]' notes.md || echo "See the commits since the last release." > notes.md
+          cat >> notes.md <<'NOTES'
+
+          ### Downloads
+
+          | File | For |
+          | --- | --- |
+          | `openperiph.exe` | Windows: just run it |
+          | `openperiph-*-windows-x64.zip` | Windows, with the README |
+          | `openperiph-*-x86_64.pkg.tar.zst` | Arch / CachyOS: `sudo pacman -U` it |
+          | `openperiph-linux-x64` | Other Linux: make it executable and run it |
+          | `openperiph-*-linux-x64.tar.gz` | Other Linux, with the README |
+
+          OpenPeriph updates itself: it offers new releases when it starts.
+          NOTES
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -l dist
+          cat notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ needs.version.outputs.version }}"
+          sha="$(git rev-parse HEAD)"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* --target "$sha" --title "OpenPeriph $tag" --notes-file notes.md
+          fi

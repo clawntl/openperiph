@@ -158,20 +158,19 @@ mod tests {
     #[test]
     fn round_trip() {
         let none: [CustomKeycode; 0] = [];
-        let texts = vec![
-            "Hello, world!".to_string(),
-            "{KC_LCTL,KC_C}{100}{+KC_LSFT}abc{-KC_LSFT}".to_string(),
-            String::new(),
-            "braces \\{ and \\\\ backslash".to_string(),
-        ];
+        let texts =
+            vec!["Hello, world!".to_string(), "{KC_LCTL,KC_C}{100}{+KC_LSFT}abc{-KC_LSFT}".to_string(), String::new(), "braces \\{ and \\\\ backslash".to_string()];
         let buf = encode(&texts, &none).unwrap();
         assert_eq!(&buf[..13], b"Hello, world!");
-        assert_eq!(decode(&buf, 4), vec![
-            "Hello, world!".to_string(),
-            "{KC_LCTL}{KC_C}".replace("{KC_LCTL}{KC_C}", "{+KC_LCTL}{+KC_C}{-KC_C}{-KC_LCTL}{100}{+KC_LSFT}abc{-KC_LSFT}"),
-            String::new(),
-            "braces \\{ and \\\\ backslash".to_string(),
-        ]);
+        assert_eq!(
+            decode(&buf, 4),
+            vec![
+                "Hello, world!".to_string(),
+                "{KC_LCTL}{KC_C}".replace("{KC_LCTL}{KC_C}", "{+KC_LCTL}{+KC_C}{-KC_C}{-KC_LCTL}{100}{+KC_LSFT}abc{-KC_LSFT}"),
+                String::new(),
+                "braces \\{ and \\\\ backslash".to_string(),
+            ]
+        );
     }
 
     #[test]

@@ -28,8 +28,7 @@ use via::{Transport, Via};
 
 /// Every QMK raw HID interface on the system (one per keyboard).
 pub fn scan() -> Vec<hid::Collection> {
-    let mut out: Vec<hid::Collection> =
-        hid::enumerate(&|_, _| true).into_iter().filter(|c| c.usage_page == via::USAGE_PAGE && c.usage == via::USAGE).collect();
+    let mut out: Vec<hid::Collection> = hid::enumerate(&|_, _| true).into_iter().filter(|c| c.usage_page == via::USAGE_PAGE && c.usage == via::USAGE).collect();
     out.dedup_by(|a, b| a.path == b.path);
     out
 }
@@ -70,13 +69,27 @@ pub struct Backup {
 
 pub enum Job {
     Load(Option<Arc<Definition>>),
-    SetKey { layer: u8, row: u8, col: u8, code: u16 },
-    SetValue { channel: u8, id: u8, data: Vec<u8> },
+    SetKey {
+        layer: u8,
+        row: u8,
+        col: u8,
+        code: u16,
+    },
+    SetValue {
+        channel: u8,
+        id: u8,
+        data: Vec<u8>,
+    },
     LayoutOptions(u32),
     Macros(Vec<u8>),
     ResetKeymap(Option<Arc<Definition>>),
     ResetMacros,
-    Restore { keymap: Vec<Vec<Vec<u16>>>, macros: Option<Vec<u8>>, layout_options: Option<u32>, values: Vec<((u8, u8), Vec<u8>)> },
+    Restore {
+        keymap: Vec<Vec<Vec<u16>>>,
+        macros: Option<Vec<u8>>,
+        layout_options: Option<u32>,
+        values: Vec<((u8, u8), Vec<u8>)>,
+    },
     /// Restart into the bootloader; the optional message is a keyboard-specific fallback for
     /// firmware without VIA's bootloader command.
     Bootloader(Option<Vec<u8>>),
@@ -93,10 +106,7 @@ pub type Connect = Box<dyn Fn() -> Result<Box<dyn Transport>, String> + Send>;
 /// Opens the raw HID interface at this path.
 pub fn connect_hid(path: String) -> Connect {
     Box::new(move || {
-        let c = hid::enumerate(&|_, _| true)
-            .into_iter()
-            .find(|c| c.path == path && c.usage_page == via::USAGE_PAGE)
-            .ok_or("The keyboard isn't connected.")?;
+        let c = hid::enumerate(&|_, _| true).into_iter().find(|c| c.path == path && c.usage_page == via::USAGE_PAGE).ok_or("The keyboard isn't connected.")?;
         Ok(Box::new(via::HidTransport::open(&c)?) as Box<dyn Transport>)
     })
 }
@@ -289,16 +299,17 @@ fn run<T: Transport + ?Sized>(v: &mut Via<Box<T>>, job: Job, unsaved: &mut Vec<u
             Outcome::Message("Restored the saved settings to the keyboard.".into())
         }
         Job::Bootloader(fallback) => {
-            let done = v.bootloader()? || match fallback {
-                Some(m) => {
-                    let mut msg = [0u8; via::MSG_LEN];
-                    msg[..m.len().min(via::MSG_LEN)].copy_from_slice(&m[..m.len().min(via::MSG_LEN)]);
-                    // the keyboard restarts straight away, so no answer is expected
-                    let _ = v.t.exchange(&msg);
-                    true
-                }
-                None => false,
-            };
+            let done = v.bootloader()?
+                || match fallback {
+                    Some(m) => {
+                        let mut msg = [0u8; via::MSG_LEN];
+                        msg[..m.len().min(via::MSG_LEN)].copy_from_slice(&m[..m.len().min(via::MSG_LEN)]);
+                        // the keyboard restarts straight away, so no answer is expected
+                        let _ = v.t.exchange(&msg);
+                        true
+                    }
+                    None => false,
+                };
             if done {
                 Outcome::Message("The keyboard restarted into its bootloader. Flash it, or unplug it to go back.".into())
             } else {

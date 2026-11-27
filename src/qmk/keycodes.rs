@@ -436,11 +436,7 @@ fn friendly(short: &str) -> Option<&'static str> {
 
 /// Turns `QK_RGB_MATRIX_TOGGLE` / `UG_TOGG` style names into words.
 fn words_from_name(n: &str) -> String {
-    let n = n
-        .trim_start_matches("KC_")
-        .trim_start_matches("QK_")
-        .trim_start_matches("MS_")
-        .replace('_', " ");
+    let n = n.trim_start_matches("KC_").trim_start_matches("QK_").trim_start_matches("MS_").replace('_', " ");
     let mut out = String::new();
     for (i, w) in n.split(' ').enumerate() {
         if i > 0 {
@@ -548,8 +544,8 @@ mod tests {
     fn names_round_trip() {
         let custom = vec![CustomKeycode { name: "MY_KEY".into(), ..Default::default() }];
         for code in [
-            0x0004u16, 0x0028, 0x00A8, 0x0001, 0x0000, 0x0104, 0x0306, 0x1104, 0x2104, 0x2F2C, 0x4129, 0x5021, 0x5201,
-            0x5221, 0x5242, 0x5263, 0x5284, 0x52A2, 0x52C1, 0x5701, 0x7700, 0x7705, 0x7C00, 0x7840, 0x7E00, 0x7E41,
+            0x0004u16, 0x0028, 0x00A8, 0x0001, 0x0000, 0x0104, 0x0306, 0x1104, 0x2104, 0x2F2C, 0x4129, 0x5021, 0x5201, 0x5221, 0x5242, 0x5263, 0x5284, 0x52A2, 0x52C1,
+            0x5701, 0x7700, 0x7705, 0x7C00, 0x7840, 0x7E00, 0x7E41,
         ] {
             let n = name(code);
             assert_eq!(parse(&n, &custom), Some(code), "{n} ({code:#06X})");

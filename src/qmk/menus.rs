@@ -8,10 +8,16 @@ use serde_json::{json, Value};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ControlKind {
-    Range { min: i64, max: i64 },
+    Range {
+        min: i64,
+        max: i64,
+    },
     /// (label, value)
     Dropdown(Vec<(String, i64)>),
-    Toggle { off: i64, on: i64 },
+    Toggle {
+        off: i64,
+        on: i64,
+    },
     /// Hue and saturation, one byte each.
     Color,
     Keycode,
@@ -72,30 +78,123 @@ pub struct Menu {
 // Built-in menus (the ones VIA has under these names)
 
 const RGB_MATRIX_EFFECTS: &[&str] = &[
-    "All off", "Solid colour", "Alphas mods", "Gradient up down", "Gradient left right", "Breathing", "Band sat.",
-    "Band val.", "Pinwheel sat.", "Pinwheel val.", "Spiral sat.", "Spiral val.", "Cycle all", "Cycle left right",
-    "Cycle up down", "Rainbow chevron", "Cycle out in", "Cycle out in dual", "Cycle pinwheel", "Cycle spiral",
-    "Dual beacon", "Rainbow beacon", "Rainbow pinwheels", "Flower blooming", "Raindrops", "Jellybean raindrops",
-    "Hue breathing", "Hue pendulum", "Hue wave", "Pixel fractal", "Pixel flow", "Pixel rain", "Typing heatmap",
-    "Digital rain", "Solid reactive simple", "Solid reactive", "Solid reactive wide", "Solid reactive multi wide",
-    "Solid reactive cross", "Solid reactive multi cross", "Solid reactive nexus", "Solid reactive multi nexus",
-    "Splash", "Multi splash", "Solid splash", "Solid multi splash",
+    "All off",
+    "Solid colour",
+    "Alphas mods",
+    "Gradient up down",
+    "Gradient left right",
+    "Breathing",
+    "Band sat.",
+    "Band val.",
+    "Pinwheel sat.",
+    "Pinwheel val.",
+    "Spiral sat.",
+    "Spiral val.",
+    "Cycle all",
+    "Cycle left right",
+    "Cycle up down",
+    "Rainbow chevron",
+    "Cycle out in",
+    "Cycle out in dual",
+    "Cycle pinwheel",
+    "Cycle spiral",
+    "Dual beacon",
+    "Rainbow beacon",
+    "Rainbow pinwheels",
+    "Flower blooming",
+    "Raindrops",
+    "Jellybean raindrops",
+    "Hue breathing",
+    "Hue pendulum",
+    "Hue wave",
+    "Pixel fractal",
+    "Pixel flow",
+    "Pixel rain",
+    "Typing heatmap",
+    "Digital rain",
+    "Solid reactive simple",
+    "Solid reactive",
+    "Solid reactive wide",
+    "Solid reactive multi wide",
+    "Solid reactive cross",
+    "Solid reactive multi cross",
+    "Solid reactive nexus",
+    "Solid reactive multi nexus",
+    "Splash",
+    "Multi splash",
+    "Solid splash",
+    "Solid multi splash",
 ];
 
 const RGBLIGHT_EFFECTS: &[&str] = &[
-    "All off", "Solid colour", "Breathing 1", "Breathing 2", "Breathing 3", "Breathing 4", "Rainbow mood 1",
-    "Rainbow mood 2", "Rainbow mood 3", "Rainbow swirl 1", "Rainbow swirl 2", "Rainbow swirl 3", "Rainbow swirl 4",
-    "Rainbow swirl 5", "Rainbow swirl 6", "Snake 1", "Snake 2", "Snake 3", "Snake 4", "Snake 5", "Snake 6",
-    "Knight 1", "Knight 2", "Knight 3", "Christmas", "Gradient 1", "Gradient 2", "Gradient 3", "Gradient 4",
-    "Gradient 5", "Gradient 6", "Gradient 7", "Gradient 8", "Gradient 9", "Gradient 10", "RGB test", "Alternating",
-    "Twinkle 1", "Twinkle 2", "Twinkle 3", "Twinkle 4", "Twinkle 5", "Twinkle 6",
+    "All off",
+    "Solid colour",
+    "Breathing 1",
+    "Breathing 2",
+    "Breathing 3",
+    "Breathing 4",
+    "Rainbow mood 1",
+    "Rainbow mood 2",
+    "Rainbow mood 3",
+    "Rainbow swirl 1",
+    "Rainbow swirl 2",
+    "Rainbow swirl 3",
+    "Rainbow swirl 4",
+    "Rainbow swirl 5",
+    "Rainbow swirl 6",
+    "Snake 1",
+    "Snake 2",
+    "Snake 3",
+    "Snake 4",
+    "Snake 5",
+    "Snake 6",
+    "Knight 1",
+    "Knight 2",
+    "Knight 3",
+    "Christmas",
+    "Gradient 1",
+    "Gradient 2",
+    "Gradient 3",
+    "Gradient 4",
+    "Gradient 5",
+    "Gradient 6",
+    "Gradient 7",
+    "Gradient 8",
+    "Gradient 9",
+    "Gradient 10",
+    "RGB test",
+    "Alternating",
+    "Twinkle 1",
+    "Twinkle 2",
+    "Twinkle 3",
+    "Twinkle 4",
+    "Twinkle 5",
+    "Twinkle 6",
 ];
 
 const LED_MATRIX_EFFECTS: &[&str] = &[
-    "All off", "Solid", "Alphas mods", "Breathing", "Band", "Band pinwheel", "Band spiral", "Cycle left right",
-    "Cycle up down", "Cycle out in", "Dual beacon", "Solid reactive simple", "Solid reactive wide",
-    "Solid reactive multi wide", "Solid reactive cross", "Solid reactive multi cross", "Solid reactive nexus",
-    "Solid reactive multi nexus", "Solid splash", "Solid multi splash", "Wave left right", "Wave up down",
+    "All off",
+    "Solid",
+    "Alphas mods",
+    "Breathing",
+    "Band",
+    "Band pinwheel",
+    "Band spiral",
+    "Cycle left right",
+    "Cycle up down",
+    "Cycle out in",
+    "Dual beacon",
+    "Solid reactive simple",
+    "Solid reactive wide",
+    "Solid reactive multi wide",
+    "Solid reactive cross",
+    "Solid reactive multi cross",
+    "Solid reactive nexus",
+    "Solid reactive multi nexus",
+    "Solid splash",
+    "Solid multi splash",
+    "Wave left right",
+    "Wave up down",
 ];
 
 fn effects(names: &[&str]) -> Value {
@@ -121,18 +220,24 @@ pub fn builtin(name: &str) -> Option<Value> {
     Some(match name {
         "qmk_backlight" => json!({"label": "Lighting", "content": [backlight()]}),
         "qmk_rgblight" => json!({"label": "Lighting", "content": [underglow()]}),
-        "qmk_backlight_rgblight" => json!({"label": "Lighting", "content": [backlight(), underglow()]}),
-        "qmk_rgb_matrix" => json!({"label": "Lighting", "content": [{"label": "Backlight", "content": [
-            {"label": "Brightness", "type": "range", "options": [0, 255], "content": ["id_qmk_rgb_matrix_brightness", 3, 1]},
-            {"label": "Effect", "type": "dropdown", "options": effects(RGB_MATRIX_EFFECTS), "content": ["id_qmk_rgb_matrix_effect", 3, 2]},
-            {"showIf": "{id_qmk_rgb_matrix_effect} != 0", "label": "Effect speed", "type": "range", "options": [0, 255], "content": ["id_qmk_rgb_matrix_effect_speed", 3, 3]},
-            {"showIf": "{id_qmk_rgb_matrix_effect} != 0", "label": "Colour", "type": "color", "content": ["id_qmk_rgb_matrix_color", 3, 4]}
-        ]}]}),
-        "qmk_led_matrix" => json!({"label": "Lighting", "content": [{"label": "Backlight", "content": [
-            {"label": "Brightness", "type": "range", "options": [0, 255], "content": ["id_qmk_led_matrix_brightness", 5, 1]},
-            {"label": "Effect", "type": "dropdown", "options": effects(LED_MATRIX_EFFECTS), "content": ["id_qmk_led_matrix_effect", 5, 2]},
-            {"showIf": "{id_qmk_led_matrix_effect} != 0", "label": "Effect speed", "type": "range", "options": [0, 255], "content": ["id_qmk_led_matrix_effect_speed", 5, 3]}
-        ]}]}),
+        "qmk_backlight_rgblight" => {
+            json!({"label": "Lighting", "content": [backlight(), underglow()]})
+        }
+        "qmk_rgb_matrix" => {
+            json!({"label": "Lighting", "content": [{"label": "Backlight", "content": [
+                {"label": "Brightness", "type": "range", "options": [0, 255], "content": ["id_qmk_rgb_matrix_brightness", 3, 1]},
+                {"label": "Effect", "type": "dropdown", "options": effects(RGB_MATRIX_EFFECTS), "content": ["id_qmk_rgb_matrix_effect", 3, 2]},
+                {"showIf": "{id_qmk_rgb_matrix_effect} != 0", "label": "Effect speed", "type": "range", "options": [0, 255], "content": ["id_qmk_rgb_matrix_effect_speed", 3, 3]},
+                {"showIf": "{id_qmk_rgb_matrix_effect} != 0", "label": "Colour", "type": "color", "content": ["id_qmk_rgb_matrix_color", 3, 4]}
+            ]}]})
+        }
+        "qmk_led_matrix" => {
+            json!({"label": "Lighting", "content": [{"label": "Backlight", "content": [
+                {"label": "Brightness", "type": "range", "options": [0, 255], "content": ["id_qmk_led_matrix_brightness", 5, 1]},
+                {"label": "Effect", "type": "dropdown", "options": effects(LED_MATRIX_EFFECTS), "content": ["id_qmk_led_matrix_effect", 5, 2]},
+                {"showIf": "{id_qmk_led_matrix_effect} != 0", "label": "Effect speed", "type": "range", "options": [0, 255], "content": ["id_qmk_led_matrix_effect_speed", 5, 3]}
+            ]}]})
+        }
         "qmk_audio" => json!({"label": "Audio", "content": [{"label": "Audio", "content": [
             {"label": "Enable audio", "type": "toggle", "content": ["id_qmk_audio_enable", 4, 1]},
             {"label": "Enable audio clicky", "type": "toggle", "content": ["id_qmk_audio_clicky_enable", 4, 2]}
@@ -199,7 +304,9 @@ fn parse_control(v: &Value) -> Option<Control> {
 
 /// Collects controls from a section's content, descending into nested groups.
 fn collect(content: &Value, label: &str, out: &mut Vec<Section>) {
-    let Some(items) = content.as_array() else { return };
+    let Some(items) = content.as_array() else {
+        return;
+    };
     let mut here = Section { label: label.to_string(), controls: Vec::new() };
     for it in items {
         if it.get("type").is_some() {
@@ -369,7 +476,9 @@ impl Parser {
 
 /// Evaluates a `showIf`; an expression this can't read shows the control.
 pub fn show_if(expr: &str, values: &HashMap<String, i64>) -> bool {
-    let Some(t) = tokens(expr, values) else { return true };
+    let Some(t) = tokens(expr, values) else {
+        return true;
+    };
     let mut p = Parser { t, p: 0 };
     match p.or() {
         Some(v) if p.p == p.t.len() => v != 0,

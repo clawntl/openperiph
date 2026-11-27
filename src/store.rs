@@ -33,11 +33,7 @@ fn dir() -> Option<PathBuf> {
 }
 
 pub fn load(device_id: &str) -> Saved {
-    dir()
-        .map(|d| d.join(format!("{device_id}.json")))
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    dir().map(|d| d.join(format!("{device_id}.json"))).and_then(|p| std::fs::read_to_string(p).ok()).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
 pub fn save(device_id: &str, saved: &Saved) -> Result<(), String> {
@@ -53,10 +49,13 @@ fn definitions_dir() -> Option<PathBuf> {
 
 /// Every imported VIA definition, as JSON text.
 pub fn imported_definitions() -> Vec<String> {
-    let Some(d) = definitions_dir() else { return Vec::new() };
-    let Ok(entries) = std::fs::read_dir(d) else { return Vec::new() };
-    let mut files: Vec<PathBuf> =
-        entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect();
+    let Some(d) = definitions_dir() else {
+        return Vec::new();
+    };
+    let Ok(entries) = std::fs::read_dir(d) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect();
     files.sort();
     files.into_iter().filter_map(|p| std::fs::read_to_string(p).ok()).collect()
 }
@@ -66,4 +65,53 @@ pub fn import_definition(text: &str, vendor_id: u16, product_id: u16) -> Result<
     let d = definitions_dir().ok_or("No folder to save settings in.")?;
     std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     std::fs::write(d.join(format!("{vendor_id:04x}_{product_id:04x}.json")), text).map_err(|e| e.to_string())
+}
+
+/// App-wide choices.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Prefs {
+    /// "nebula" (or empty), "plain" or "picture".
+    #[serde(default)]
+    pub background: String,
+}
+
+pub fn prefs() -> Prefs {
+    dir().map(|d| d.join("prefs.json")).and_then(|p| std::fs::read_to_string(p).ok()).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+}
+
+pub fn save_prefs(p: &Prefs) -> Result<(), String> {
+    let d = dir().ok_or("No folder to save settings in.")?;
+    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    std::fs::write(d.join("prefs.json"), serde_json::to_string_pretty(p).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+const PICTURE_TYPES: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
+
+fn pictures_dir() -> Option<PathBuf> {
+    dir().map(|d| d.join("pictures"))
+}
+
+/// A kept picture ("background", or "device-<id>"), if there is one.
+pub fn picture(name: &str) -> Option<PathBuf> {
+    let d = pictures_dir()?;
+    PICTURE_TYPES.iter().map(|e| d.join(format!("{name}.{e}"))).find(|p| p.is_file())
+}
+
+/// Keeps a copy of a picture under `name`, replacing the one there was.
+pub fn keep_picture(name: &str, from: &std::path::Path) -> Result<PathBuf, String> {
+    let ext = from.extension().map(|e| e.to_string_lossy().to_lowercase()).filter(|e| PICTURE_TYPES.contains(&e.as_str())).ok_or("Pick a PNG, JPEG or WebP picture.")?;
+    let d = pictures_dir().ok_or("No folder to save settings in.")?;
+    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    remove_picture(name);
+    let to = d.join(format!("{name}.{ext}"));
+    std::fs::copy(from, &to).map_err(|e| e.to_string())?;
+    Ok(to)
+}
+
+pub fn remove_picture(name: &str) {
+    while let Some(p) = picture(name) {
+        if std::fs::remove_file(&p).is_err() {
+            break;
+        }
+    }
 }

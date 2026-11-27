@@ -218,12 +218,7 @@ pub trait Driver: Send + Sync {
         Err("This device has no lighting settings.".into())
     }
     /// Send settings to the device. `None` leaves that part as it is.
-    fn apply(
-        &self,
-        _keys: Option<&KeySettings>,
-        _lighting: Option<&LightingState>,
-        _progress: Progress,
-    ) -> Result<(), String> {
+    fn apply(&self, _keys: Option<&KeySettings>, _lighting: Option<&LightingState>, _progress: Progress) -> Result<(), String> {
         Err("This device has no key or lighting settings.".into())
     }
 

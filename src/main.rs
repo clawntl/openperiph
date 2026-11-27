@@ -34,15 +34,12 @@ fn main() -> eframe::Result<()> {
         } else if a == "--demo" {
             demo = true;
         } else if a == "--help" || a == "-h" {
-            println!("openperiph [--demo] [--screenshot FILE.png [--page keys|lighting|macros|settings|mouse]]");
+            println!("openperiph [--demo] [--screenshot FILE.png [--page home|keys|lighting|colour|macros|settings|mouse|x78|about|fw-update|app-update|flashing]]");
             return Ok(());
         }
     }
 
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_title("OpenPeriph")
-        .with_inner_size([1240.0, 780.0])
-        .with_min_inner_size([980.0, 640.0]);
+    let mut viewport = egui::ViewportBuilder::default().with_title("OpenPeriph").with_inner_size([1240.0, 780.0]).with_min_inner_size([980.0, 640.0]);
     if screenshot.is_some() {
         // Open quietly behind other windows so a check never gets in the way.
         viewport = viewport.with_active(false);
@@ -52,9 +49,5 @@ fn main() -> eframe::Result<()> {
         }
     }
     let options = eframe::NativeOptions { viewport, ..Default::default() };
-    eframe::run_native(
-        "OpenPeriph",
-        options,
-        Box::new(move |cc| Ok(Box::new(app::OpenPeriphApp::new(cc, screenshot, page, demo)))),
-    )
+    eframe::run_native("OpenPeriph", options, Box::new(move |cc| Ok(Box::new(app::OpenPeriphApp::new(cc, screenshot, page, demo)))))
 }

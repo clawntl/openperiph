@@ -227,12 +227,7 @@ fn protected<L: IspLink>(isp: &mut L, image_len: usize, page_size: u32) -> Resul
 }
 
 /// Sends write or check commands for the whole image, reading the status every 30 commands.
-fn stream<L: IspLink>(
-    isp: &mut L,
-    image: &[u8],
-    check: bool,
-    progress: &dyn Fn(f32),
-) -> Result<(), String> {
+fn stream<L: IspLink>(isp: &mut L, image: &[u8], check: bool, progress: &dyn Fn(f32)) -> Result<(), String> {
     let _ = isp.status(); // clear an old status
     let mut outstanding = 0usize;
     let mut off = 0usize;

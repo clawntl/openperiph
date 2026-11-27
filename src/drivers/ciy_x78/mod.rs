@@ -68,14 +68,7 @@ impl CiyX78 {
             })
             .collect();
         CiyX78 {
-            info: DeviceInfo {
-                id: "ciy-x78".into(),
-                name: "CIY X78".into(),
-                maker: "CIY".into(),
-                kind: DeviceKind::Keyboard,
-                vendor_id: VID,
-                product_id: PID,
-            },
+            info: DeviceInfo { id: "ciy-x78".into(), name: "CIY X78".into(), maker: "CIY".into(), kind: DeviceKind::Keyboard, vendor_id: VID, product_id: PID },
             layout: KeyboardLayout { keys, width: LAYOUT_W, height: LAYOUT_H },
         }
     }
@@ -281,14 +274,8 @@ impl Link {
             return Err("The keyboard isn't connected.".into());
         }
         let vendor: Vec<_> = cols.iter().filter(|c| c.usage_page == USAGE_PAGE && c.usage == USAGE).collect();
-        let data = vendor
-            .iter()
-            .find(|c| c.feature_len as usize == DATA_LEN)
-            .ok_or("The keyboard's settings channel wasn't found.")?;
-        let cmd = vendor
-            .iter()
-            .find(|c| c.feature_len == CMD_FEATURE_LEN)
-            .ok_or("The keyboard's command channel wasn't found.")?;
+        let data = vendor.iter().find(|c| c.feature_len as usize == DATA_LEN).ok_or("The keyboard's settings channel wasn't found.")?;
+        let cmd = vendor.iter().find(|c| c.feature_len == CMD_FEATURE_LEN).ok_or("The keyboard's command channel wasn't found.")?;
         let data = hid::open(&data.path).ok_or("Couldn't open the keyboard (is another app using it?).")?;
         let cmd = hid::open(&cmd.path).ok_or("Couldn't open the keyboard (is another app using it?).")?;
         Ok(Link { data, cmd })

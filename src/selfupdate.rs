@@ -58,7 +58,9 @@ fn writable_dir(p: &Path) -> bool {
 }
 
 pub fn install_kind() -> InstallKind {
-    let Ok(exe) = std::env::current_exe() else { return InstallKind::Manual };
+    let Ok(exe) = std::env::current_exe() else {
+        return InstallKind::Manual;
+    };
     let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
     #[cfg(target_os = "linux")]
     {
