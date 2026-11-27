@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.6.2 (2026-11-27)
+
 - CIY X78 on SMK, after an update: a window walks you through unplugging and plugging the
   keyboard back in (the keyboard stays in its update mode until you do), ticking off each step as
   it happens, and closes once the keyboard is back. The Firmware card shows the same steps.
