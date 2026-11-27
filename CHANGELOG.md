@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.6.5 (2026-11-27)
+
 - Windows: updating OpenPeriph through its installer no longer fails now and then, leaving it
   closed. The installer started while OpenPeriph was still quitting, found it in use and gave
   up; it now waits for OpenPeriph to be gone (and closes it if needed). Its log goes to
