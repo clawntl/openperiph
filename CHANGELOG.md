@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.5.1 (2026-11-27)
+
 - Windows installer (`openperiph-setup-x64.exe`): installs for your user, with a Start menu entry
   and an uninstaller; installed copies update through it. The portable `openperiph.exe` stays.
 - New app icon, the same in the taskbar, the Start menu, the Linux menu and the app's top bar.
