@@ -279,6 +279,11 @@ impl IspLink for HidIsp {
     }
 }
 
+/// Whether a keyboard is sitting in its update mode (the bootloader's USB device is present).
+pub fn in_update_mode() -> bool {
+    ISP_PRODUCT_IDS.iter().any(|p| !hid::collections(ISP_VENDOR_ID, *p).is_empty())
+}
+
 /// The bootloader's collections, when a keyboard is in update mode.
 fn find_isp(chip: &Chip) -> Option<(hid::Collection, hid::Collection)> {
     for pid in ISP_PRODUCT_IDS {

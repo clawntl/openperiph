@@ -67,6 +67,14 @@ pub const SOURCES: &[Source] = &[
     },
 ];
 
+impl Source {
+    /// Whether the keyboard has to be unplugged and plugged back in after an update to start
+    /// the new firmware (the Sinowealth bootloader doesn't restart it).
+    pub fn needs_replug(&self) -> bool {
+        matches!(self.method, Method::Sinowealth { .. })
+    }
+}
+
 pub fn source_for(vid: u16, pid: u16) -> Option<&'static Source> {
     SOURCES.iter().find(|s| (s.vendor_id, s.product_id) == (vid, pid))
 }

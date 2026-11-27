@@ -80,6 +80,20 @@ pub struct QmkState {
     /// Settings to put back once the updated keyboard is read, and the old firmware's default
     /// keymap (to tell the person's changes from the firmware's).
     pending_restore: Option<(qmk::Backup, Option<Vec<Vec<Vec<u16>>>>)>,
+    /// What the update in progress installs.
+    fw_installing: Option<String>,
+    /// After an update that needs the keyboard unplugged and plugged back in to start.
+    pub fw_replug: Option<Replug>,
+}
+
+/// Waiting for the keyboard to come back after an update.
+pub struct Replug {
+    /// What was installed ("v0.2.2" or a file name).
+    pub what: String,
+    /// The keyboard is still in its update mode (not unplugged yet).
+    pub update_mode: bool,
+    /// The popup was put away; the Firmware card still shows the steps.
+    pub hidden: bool,
 }
 
 /// Messages from firmware update threads.
@@ -89,6 +103,8 @@ pub enum FwMsg {
     /// The old firmware's default keymap, read before updating.
     Defaults(Vec<Vec<Vec<u16>>>),
     Done(Result<String, String>),
+    /// Whether a keyboard is in its update mode, while waiting for a replug.
+    UpdateMode(bool),
 }
 
 impl QmkState {
@@ -100,11 +116,16 @@ impl QmkState {
         self.fw_busy.is_some()
     }
 
+    /// Waiting for the keyboard to be unplugged and plugged back in after an update.
+    pub fn awaiting_replug(&self) -> bool {
+        self.fw_replug.is_some()
+    }
+
     /// The newer release's tag, when the keyboard's firmware is older.
     pub fn update_available(&self) -> Option<String> {
         let installed = self.snap.as_ref()?.firmware.unwrap_or(0);
         match &self.fw_release {
-            Some(Ok(r)) if r.version > installed && self.fw_busy.is_none() => Some(r.tag.clone()),
+            Some(Ok(r)) if r.version > installed && self.fw_busy.is_none() && self.fw_replug.is_none() => Some(r.tag.clone()),
             _ => None,
         }
     }
@@ -196,6 +217,7 @@ impl OpenPeriphApp {
             Event::Loaded(Ok(s)) => {
                 q.loading = false;
                 q.error = None;
+                let restarted = q.fw_replug.take().map(|r| (r.what, s.firmware.filter(|f| *f != 0)));
                 q.macro_edit = s.macros.clone();
                 q.macro_dirty = false;
                 q.layer = q.layer.min(s.layers.saturating_sub(1));
@@ -210,6 +232,15 @@ impl OpenPeriphApp {
                         s.values.insert((3, 4), vec![150, 200]);
                     }
                 }
+                if let Some((what, running)) = restarted {
+                    // the update has started: say so, and look at the releases again
+                    let running = running.map(firmware::version_text).unwrap_or(what);
+                    self.set_status(format!("{name} restarted with firmware {running}."), true);
+                    self.firmware_check(i, true);
+                }
+                let Some(q) = self.devices[i].qmk.as_mut() else {
+                    return;
+                };
                 if let Some((b, old_defaults)) = q.pending_restore.take() {
                     let def = qmk_driver(&self.devices[i]).and_then(|d| d.definition());
                     let q = self.devices[i].qmk.as_mut().unwrap();
@@ -229,11 +260,14 @@ impl OpenPeriphApp {
                     }
                     return;
                 }
-                self.set_status(format!("Read the keymap and settings from {name}."), true);
+                if !self.status.contains("restarted with firmware") {
+                    self.set_status(format!("Read the keymap and settings from {name}."), true);
+                }
                 self.firmware_check(i, false);
             }
             Event::Loaded(Err(e)) => {
                 q.loading = false;
+                q.fw_replug = None; // it's back, even if it can't be read
                 q.error = Some(e.clone());
                 q.jobs = None;
                 self.set_status(e, false);
@@ -291,6 +325,11 @@ impl OpenPeriphApp {
                         q.fw_busy = Some(("Writing the firmware".into(), 0.42));
                     }
                 }
+                "fw-replug" => {
+                    if let Some(q) = self.devices[i].qmk.as_mut() {
+                        q.fw_replug = Some(Replug { what: "v1.0.1".into(), update_mode: false, hidden: false });
+                    }
+                }
                 _ => {}
             }
             return;
@@ -303,7 +342,8 @@ impl OpenPeriphApp {
     }
 
     pub(super) fn firmware_msg(&mut self, i: usize, m: FwMsg) {
-        let name = self.devices[i].driver.info().name.clone();
+        let info = self.devices[i].driver.info().clone();
+        let name = info.name.clone();
         let Some(q) = self.devices[i].qmk.as_mut() else {
             return;
         };
@@ -341,10 +381,20 @@ impl OpenPeriphApp {
                 if r.is_err() {
                     q.pending_restore = None;
                 }
+                let replug = r.is_ok() && firmware::source_for(info.vendor_id, info.product_id).is_some_and(|s| s.needs_replug());
+                if replug {
+                    let what = q.fw_installing.take().unwrap_or_default();
+                    q.fw_replug = Some(Replug { what, update_mode: true, hidden: false });
+                }
                 self.last_detect = None; // look for the restarted keyboard now
                 match r {
                     Ok(m) => self.set_status(m, true),
                     Err(e) => self.set_status(format!("Firmware update failed: {e}"), false),
+                }
+            }
+            FwMsg::UpdateMode(on) => {
+                if let Some(r) = q.fw_replug.as_mut() {
+                    r.update_mode = on;
                 }
             }
         }
@@ -374,6 +424,11 @@ impl OpenPeriphApp {
         if file.is_none() && release.is_none() {
             return;
         }
+        q.fw_installing = Some(match (&file, &release) {
+            (Some(p), _) => p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            (None, Some(r)) => r.tag.clone(),
+            _ => String::new(),
+        });
         q.pending_restore = match (&def, &q.snap, q.fw_discard) {
             (Some(d), Some(s), false) => Some((qmk::backup(d, s), None)),
             _ => None,
@@ -426,17 +481,26 @@ impl OpenPeriphApp {
             let Some(q) = self.devices[i].qmk.as_mut() else {
                 return;
             };
-            let installed = q.snap.as_ref().and_then(|s| s.firmware).unwrap_or(0);
+            // what the keyboard runs, once it has been read
+            let read = q.snap.as_ref().map(|s| s.firmware.unwrap_or(0));
+            let installed = read.unwrap_or(0);
             card(ui, |ui| {
                 ui.label(theme::title("Firmware"));
                 ui.add_space(4.0);
+                if let Some(r) = &mut q.fw_replug {
+                    replug_steps(ui, r, connected);
+                    return;
+                }
                 let have = if installed > 0 { firmware::version_text(installed) } else { "v1.0.0 or older".into() };
                 let rel = q.fw_release.as_ref().and_then(|r| r.as_ref().ok()).cloned();
-                let newer = rel.as_ref().is_some_and(|r| r.version > installed);
+                // nothing to compare until the keyboard has been read
+                let newer = read.is_some() && rel.as_ref().is_some_and(|r| r.version > installed);
                 // where you are, in one line
                 ui.horizontal(|ui| {
                     let (dot, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
                     let (head, colour) = match (&q.fw_release, q.fw_checking) {
+                        _ if read.is_none() && !connected => ("Plug in the keyboard to see its firmware", TEXT_DIM),
+                        _ if read.is_none() => ("Reading the keyboard…", TEXT_DIM),
                         (_, true) => ("Checking for updates…", TEXT_DIM),
                         (Some(Ok(_)), _) if newer => ("Update available", ACCENT),
                         (Some(Ok(_)), _) => ("Up to date", super::GOOD),
@@ -455,6 +519,11 @@ impl OpenPeriphApp {
                             ui.label(RichText::new(&r.tag).family(theme::semibold()).color(theme::TEXT));
                             ui.add_space(8.0);
                             ui.hyperlink_to("What's new ›", &r.page_url);
+                        }
+                        _ if read.is_none() => {
+                            if let Some(r) = &rel {
+                                ui.label(RichText::new(format!("The latest release is {}", r.tag)).color(TEXT_DIM));
+                            }
                         }
                         Some(r) => {
                             ui.label(RichText::new(format!("{} is installed", if installed > 0 { have.clone() } else { r.tag.clone() })).color(TEXT_DIM));
@@ -492,6 +561,9 @@ impl OpenPeriphApp {
                         "Takes about 20 seconds. Your keymap, macros and lighting are kept."
                     };
                     ui.label(theme::small(note));
+                    if src.needs_replug() {
+                        ui.label(theme::small("At the end you'll unplug the keyboard and plug it back in, to start the new firmware."));
+                    }
                     ui.add_space(4.0);
                 }
                 egui::CollapsingHeader::new(RichText::new("More options").color(TEXT_DIM)).id_salt("fw-more").show(ui, |ui| {
@@ -1668,5 +1740,52 @@ mod colour_tests {
             let (h2, s2) = parse_hex(&format!("{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())).unwrap();
             assert!((h2 as i32 - h as i32).abs() <= 2 && (s2 as i32 - s as i32).abs() <= 2, "{h},{s} -> {h2},{s2}");
         }
+    }
+}
+
+/// The Firmware card's steps after an update that needs a replug: where things are, live.
+fn replug_steps(ui: &mut Ui, r: &mut Replug, connected: bool) {
+    ui.horizontal(|ui| {
+        let (dot, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
+        ui.painter().circle_filled(dot.center(), 4.5, ACCENT);
+        ui.label(RichText::new("Unplug the keyboard and plug it back in").size(14.0).family(theme::semibold()).color(ACCENT));
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(20.0);
+        ui.label(
+            RichText::new(format!("{} is written and checked. The keyboard's update mode doesn't restart it, so it needs plugging back in to start.", r.what))
+                .color(TEXT_DIM),
+        );
+    });
+    ui.add_space(6.0);
+    replug_progress(ui, r.update_mode, connected);
+    if r.hidden && ui.button("Show the steps again").clicked() {
+        r.hidden = false;
+    }
+}
+
+/// Three steps with the current one marked: unplug, plug back in, starting.
+pub(super) fn replug_progress(ui: &mut Ui, update_mode: bool, connected: bool) {
+    let step = if update_mode {
+        0
+    } else if !connected {
+        1
+    } else {
+        2
+    };
+    for (n, text) in ["Unplug the keyboard (it's still in its update mode)", "Plug it back in", "Starting the new firmware and reading its settings"].iter().enumerate() {
+        ui.horizontal(|ui| {
+            ui.add_space(20.0);
+            let (mark, colour) = match n.cmp(&step) {
+                std::cmp::Ordering::Less => ("✓", super::GOOD),
+                std::cmp::Ordering::Equal => ("›", ACCENT),
+                std::cmp::Ordering::Greater => ("·", TEXT_DIM),
+            };
+            ui.label(RichText::new(mark).color(colour).family(theme::semibold()));
+            ui.label(RichText::new(*text).color(if n == step { theme::TEXT } else { TEXT_DIM }));
+            if n == step {
+                ui.spinner();
+            }
+        });
     }
 }

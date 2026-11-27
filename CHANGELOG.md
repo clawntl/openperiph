@@ -5,6 +5,12 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- CIY X78 on SMK, after an update: a window walks you through unplugging and plugging the
+  keyboard back in (the keyboard stays in its update mode until you do), ticking off each step as
+  it happens, and closes once the keyboard is back. The Firmware card shows the same steps.
+- The Firmware card no longer says an update is available while the keyboard hasn't been read
+  yet (it compared the release with "no version"); it says it's reading the keyboard instead.
+
 ## v0.6.1 (2026-11-27)
 
 - CIY X78 running SMK: **firmware updates** from the Device page, as on the SK620. New releases of

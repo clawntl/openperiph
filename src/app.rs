@@ -189,7 +189,7 @@ impl OpenPeriphApp {
             ),
             "lighting" | "colour" => (first, Tab::Lighting),
             "macros" => (first, Tab::Macros),
-            "settings" | "update" | "flashing" => (first, Tab::Settings),
+            "settings" | "update" | "flashing" | "fw-replug" => (first, Tab::Settings),
             _ => (first, Tab::Keys),
         };
         let view = match page.as_str() {
@@ -421,6 +421,17 @@ impl OpenPeriphApp {
                     ctx.request_repaint();
                 });
             }
+            // after an update that needs a replug: is the keyboard still in its update mode?
+            for (i, d) in self.devices.iter().enumerate() {
+                if d.qmk.as_ref().is_some_and(|q| q.awaiting_replug()) {
+                    let tx = self.tx.clone();
+                    let ctx = ctx.clone();
+                    std::thread::spawn(move || {
+                        let _ = tx.send(Msg::Firmware(i, qmk_ui::FwMsg::UpdateMode(crate::qmk::sinowealth::in_update_mode())));
+                        ctx.request_repaint();
+                    });
+                }
+            }
             if !self.discovering && !self.screenshot_mode() {
                 self.discovering = true;
                 let tx = self.tx.clone();
@@ -588,6 +599,35 @@ impl OpenPeriphApp {
             }
             return;
         }
+        if let Some(i) = self.devices.iter().position(|d| d.qmk.as_ref().is_some_and(|q| q.fw_replug.as_ref().is_some_and(|r| !r.hidden))) {
+            let info = self.devices[i].driver.info().clone();
+            let connected = self.devices[i].connected == Some(true);
+            let Some(r) = self.devices[i].qmk.as_mut().and_then(|q| q.fw_replug.as_mut()) else { return };
+            let mut hide = false;
+            let resp = egui::Modal::new(egui::Id::unique("fw-replug")).show(ctx, |ui| {
+                ui.set_width(440.0);
+                ui.label(theme::title(format!("Unplug your {} and plug it back in", info.name)));
+                ui.label(
+                    RichText::new(format!(
+                        "{} is written and checked. The keyboard's update mode doesn't restart it by itself, so it needs plugging back in to start the new firmware.",
+                        r.what
+                    ))
+                    .color(TEXT_DIM),
+                );
+                ui.add_space(8.0);
+                qmk_ui::replug_progress(ui, r.update_mode, connected);
+                ui.add_space(8.0);
+                ui.label(RichText::new("This closes by itself once the keyboard is back.").size(11.5).color(TEXT_DIM));
+                if ui.button("Hide").clicked() {
+                    hide = true;
+                }
+            });
+            if hide || resp.should_close() {
+                r.hidden = true;
+            }
+            ctx.request_repaint_after(Duration::from_millis(500));
+            return;
+        }
         let Some(i) = self.fw_popup else { return };
         let info = self.devices[i].driver.info().clone();
         let Some((tag, installed, notes)) = self.devices[i].qmk.as_ref().and_then(|q| q.release_summary()) else {
@@ -652,7 +692,9 @@ impl OpenPeriphApp {
                     self.fw_popup = Some(self.selected);
                 }
             }
-            if connected {
+            if self.devices[self.selected].qmk.as_ref().is_some_and(|q| q.awaiting_replug()) {
+                pill(ui, "Unplug the keyboard and plug it back in", WARN);
+            } else if connected {
                 pill(ui, "Saved on the keyboard as you go", GOOD);
             } else {
                 pill(ui, "Plug in the keyboard to change it", TEXT_DIM);
