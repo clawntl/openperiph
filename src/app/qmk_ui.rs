@@ -190,8 +190,9 @@ impl OpenPeriphApp {
             let kb = std::sync::Arc::new(std::sync::Mutex::new(qmk::demo::fake_sk620()));
             Box::new(move || Ok(Box::new(SharedFake(kb.clone())) as Box<dyn qmk::via::Transport>))
         } else {
-            let Some(c) = qd.find() else { return };
-            qmk::connect_hid(c.path)
+            // looked up by the worker, not here: on Windows listing HID devices can take a while
+            let d = driver.clone();
+            qmk::connect_driver(move || d.as_qmk().and_then(|q| q.find()))
         };
         if screenshot && !qd.demo {
             return;
@@ -416,7 +417,7 @@ impl OpenPeriphApp {
             return;
         };
         let def = qmk_driver(&self.devices[i]).and_then(|d| d.definition());
-        let raw_path = qmk_driver(&self.devices[i]).and_then(|d| d.find()).map(|c| c.path);
+        let driver = self.devices[i].driver.clone();
         let Some(q) = self.devices[i].qmk.as_mut() else {
             return;
         };
@@ -455,9 +456,9 @@ impl OpenPeriphApp {
                     }
                 };
                 firmware::check_file(src, &image)?;
-                if let (Some((l, r, c)), Some(p)) = (shape, &raw_path) {
+                if let (Some((l, r, c)), Some(raw)) = (shape, driver.as_qmk().and_then(|q| q.find())) {
                     report("Saving your settings", 0.0);
-                    if let Ok(d) = qmk::read_default_keymap(p, l, r, c) {
+                    if let Ok(d) = qmk::read_default_keymap(&raw, l, r, c) {
                         let _ = tx.send(Msg::Firmware(i, FwMsg::Defaults(d)));
                     }
                 }

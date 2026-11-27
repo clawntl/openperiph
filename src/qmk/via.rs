@@ -74,7 +74,11 @@ pub fn uses_feature_reports(c: &hid::Collection) -> bool {
 
 impl HidTransport {
     pub fn open(c: &hid::Collection) -> Result<HidTransport, String> {
-        let dev = hid::open_io(&c.path)?;
+        // Windows: HidD_SetFeature / HidD_GetFeature need a handle opened without
+        // FILE_FLAG_OVERLAPPED. On an overlapped one they can return before the keyboard has
+        // answered (SMK holds a GET_REPORT until its main loop has the answer), so the reply
+        // was read as garbage and the keyboard "couldn't be read".
+        let dev = if uses_feature_reports(c) { hid::open(&c.path).ok_or("Couldn't open the keyboard (is another app using it?).")? } else { hid::open_io(&c.path)? };
         // Report lengths include the report ID byte; QMK's are 32 + 1.
         let out_len = (c.output_len as usize).max(MSG_LEN + 1);
         let in_len = (c.input_len as usize).max(MSG_LEN + 1);

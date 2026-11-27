@@ -288,6 +288,24 @@ mod imp {
         String::from_utf16_lossy(&buf[..n])
     }
 
+    /// A device's maker, product and serial strings. Each is a USB request to the device, which
+    /// queues behind anything else it is doing (a keyboard answering VIA, say), so they're
+    /// asked once per device path and remembered while it stays plugged in.
+    fn names(path: &str, h: HANDLE) -> (String, String, String) {
+        use std::collections::HashMap;
+        use std::sync::{Mutex, OnceLock};
+        static CACHE: OnceLock<Mutex<HashMap<String, (String, String, String)>>> = OnceLock::new();
+        let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Some(n) = cache.lock().ok().and_then(|c| c.get(path).cloned()) {
+            return n;
+        }
+        let n = (hid_string(h, HidD_GetManufacturerString), hid_string(h, HidD_GetProductString), hid_string(h, HidD_GetSerialNumberString));
+        if let Ok(mut c) = cache.lock() {
+            c.insert(path.to_string(), n.clone());
+        }
+        n
+    }
+
     /// Every HID collection on the system; `filter` sees vendor and product id first.
     pub fn enumerate(filter: &dyn Fn(u16, u16) -> bool) -> Vec<Collection> {
         let mut out = Vec::new();
@@ -363,6 +381,7 @@ mod imp {
                 }
                 HidD_FreePreparsedData(pre);
                 if ok {
+                    let (manufacturer, product, serial) = names(&path, h.h);
                     out.push(Collection {
                         path,
                         vendor_id: attrs.VendorID,
@@ -373,9 +392,9 @@ mod imp {
                         output_len: caps.OutputReportByteLength,
                         feature_len: caps.FeatureReportByteLength,
                         feature_ids,
-                        manufacturer: hid_string(h.h, HidD_GetManufacturerString),
-                        product: hid_string(h.h, HidD_GetProductString),
-                        serial: hid_string(h.h, HidD_GetSerialNumberString),
+                        manufacturer,
+                        product,
+                        serial,
                     });
                 }
             }

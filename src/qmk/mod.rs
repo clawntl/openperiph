@@ -104,10 +104,20 @@ pub enum Event {
 
 pub type Connect = Box<dyn Fn() -> Result<Box<dyn Transport>, String> + Send>;
 
-/// Opens the raw HID interface at this path.
-pub fn connect_hid(path: String) -> Connect {
+/// Opens the raw HID interface at this path. Only the keyboard's own collections are looked at:
+/// listing every HID device costs a USB request per device for its names on Windows, which
+/// made finding the keyboard slow there.
+pub fn connect_hid(path: String, vendor_id: u16, product_id: u16) -> Connect {
     Box::new(move || {
-        let c = hid::enumerate(&|_, _| true).into_iter().find(|c| c.path == path && c.usage_page == via::USAGE_PAGE).ok_or("The keyboard isn't connected.")?;
+        let c = hid::collections(vendor_id, product_id).into_iter().find(|c| c.path == path && c.usage_page == via::USAGE_PAGE).ok_or("The keyboard isn't connected.")?;
+        Ok(Box::new(via::HidTransport::open(&c)?) as Box<dyn Transport>)
+    })
+}
+
+/// Finds the keyboard's VIA interface when the worker connects (off the window's thread).
+pub fn connect_driver(find: impl Fn() -> Option<hid::Collection> + Send + 'static) -> Connect {
+    Box::new(move || {
+        let c = find().ok_or("The keyboard isn't connected.")?;
         Ok(Box::new(via::HidTransport::open(&c)?) as Box<dyn Transport>)
     })
 }
@@ -322,8 +332,8 @@ fn run<T: Transport + ?Sized>(v: &mut Via<Box<T>>, job: Job, unsaved: &mut Vec<u
 
 /// The keymap the firmware starts with, read without losing the current one: reads the keymap,
 /// resets it to the firmware's default, reads that, and writes the current one back.
-pub fn read_default_keymap(path: &str, layers: usize, rows: usize, cols: usize) -> Result<Vec<Vec<Vec<u16>>>, String> {
-    let connect = connect_hid(path.to_string());
+pub fn read_default_keymap(c: &hid::Collection, layers: usize, rows: usize, cols: usize) -> Result<Vec<Vec<Vec<u16>>>, String> {
+    let connect = connect_hid(c.path.clone(), c.vendor_id, c.product_id);
     let mut v = Via::new(connect()?);
     let current = v.read_keymap(layers, rows, cols)?;
     v.reset_keymap()?;

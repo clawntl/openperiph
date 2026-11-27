@@ -5,6 +5,14 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- Windows, CIY X78 on SMK: fixed "couldn't read the keyboard" and lighting changes not working.
+  Its VIA messages go as feature reports, and Windows needs a non-overlapped handle for those;
+  with an overlapped one the answer could be read before the keyboard had sent it.
+- Windows: keyboards are found much faster, and the window no longer stops responding while
+  one is being found. Device names are asked for once per device instead of on every look
+  (each is a USB request that waits behind whatever the device is doing), connecting only looks
+  at the keyboard's own interfaces, and the lookup runs off the window's thread.
+
 ## v0.6.3 (2026-11-27)
 
 - CIY X78 on SMK: fixed updates stopping with "The keyboard didn't switch to its update mode".
