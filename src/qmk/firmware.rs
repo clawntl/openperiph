@@ -1,6 +1,8 @@
-//! Firmware updates for QMK keyboards whose firmware is published as GitHub releases and whose
+//! Firmware updates for VIA keyboards whose firmware is published as GitHub releases and whose
 //! bootloader this app can talk to. So far: the Cooler Master SK620 (github.com/clawntl/qmk-sk620),
-//! whose Holtek HT32 ROM bootloader speaks Holtek's ISP protocol over USB HID.
+//! whose Holtek HT32 ROM bootloader speaks Holtek's ISP protocol over USB HID (below), and the
+//! CIY X78 running SMK (github.com/clawntl/smk-ciy-x78), through its Sinowealth chip's ISP
+//! bootloader (`super::sinowealth`).
 //!
 //! The installed version comes from VIA (keyboard value 4, `major << 16 | minor << 8 | patch`);
 //! the newest from the GitHub API. Updating restarts the keyboard into its bootloader with a raw
@@ -20,28 +22,58 @@ use crate::hid;
 pub struct Source {
     pub vendor_id: u16,
     pub product_id: u16,
+    /// Who made the keyboard.
+    pub maker: &'static str,
+    /// The firmware it runs, as people know it ("QMK", "SMK").
+    pub firmware: &'static str,
     /// GitHub `owner/repo` whose releases carry the firmware.
     pub repo: &'static str,
     /// Release asset to download.
     pub asset: &'static str,
-    /// Raw HID message (32 bytes, zero-padded) that restarts the keyboard into its bootloader.
-    pub boot_message: &'static [u8],
-    pub isp_vendor_id: u16,
-    pub isp_product_id: u16,
+    /// File types "Flash a file" offers.
+    pub file_types: &'static [&'static str],
+    pub method: Method,
 }
 
-pub const SOURCES: &[Source] = &[Source {
-    vendor_id: 0xFEED,
-    product_id: 0x0620,
-    repo: "clawntl/qmk-sk620",
-    asset: "cm_sk620_default.bin",
-    boot_message: b"\x5bSK620-BOOTLOADER",
-    isp_vendor_id: 0x04D9,
-    isp_product_id: 0x8010,
-}];
+#[derive(Clone, Copy, Debug)]
+pub enum Method {
+    /// Holtek HT32 ROM bootloader. `boot_message` is the raw HID message (32 bytes,
+    /// zero-padded) that restarts the keyboard into it.
+    Holtek { boot_message: &'static [u8], isp_vendor_id: u16, isp_product_id: u16 },
+    /// Sinowealth ISP bootloader (sinowisp's protocol).
+    Sinowealth { chip: &'static super::sinowealth::Chip },
+}
+
+pub const SOURCES: &[Source] = &[
+    Source {
+        vendor_id: 0xFEED,
+        product_id: 0x0620,
+        maker: "Cooler Master",
+        firmware: "QMK",
+        repo: "clawntl/qmk-sk620",
+        asset: "cm_sk620_default.bin",
+        file_types: &["bin"],
+        method: Method::Holtek { boot_message: b"\x5bSK620-BOOTLOADER", isp_vendor_id: 0x04D9, isp_product_id: 0x8010 },
+    },
+    Source {
+        vendor_id: 0x258A,
+        product_id: 0x0016,
+        maker: "CIY",
+        firmware: "SMK",
+        repo: "clawntl/smk-ciy-x78",
+        asset: "smk-ciy-x78-iso.hex",
+        file_types: &["hex", "bin"],
+        method: Method::Sinowealth { chip: &super::sinowealth::SH68F89 },
+    },
+];
 
 pub fn source_for(vid: u16, pid: u16) -> Option<&'static Source> {
     SOURCES.iter().find(|s| (s.vendor_id, s.product_id) == (vid, pid))
+}
+
+/// The firmware a VIA keyboard runs: "QMK" unless it's one we know runs something else.
+pub fn firmware_name(vid: u16, pid: u16) -> &'static str {
+    source_for(vid, pid).map(|s| s.firmware).unwrap_or("QMK")
 }
 
 /// `v1.2.3` / `1.2.3` -> `0x010203`.
@@ -72,6 +104,14 @@ pub fn latest(src: &Source) -> Result<Release, String> {
     let version = parse_version(&r.tag).ok_or_else(|| format!("The latest release, {}, has no version number.", r.tag))?;
     let a = r.assets.iter().find(|a| a.name == src.asset).ok_or_else(|| format!("Release {} has no {}.", r.tag, src.asset))?;
     Ok(Release { tag: r.tag.clone(), version, download_url: a.url.clone(), sha256: a.sha256.clone(), page_url: r.page_url, notes: r.body })
+}
+
+/// Checks a firmware file before anything is changed on the keyboard.
+pub fn check_file(src: &Source, data: &[u8]) -> Result<(), String> {
+    match src.method {
+        Method::Holtek { .. } => check_image(data),
+        Method::Sinowealth { chip } => super::sinowealth::image_from(data, chip, src.vendor_id, src.product_id).map(|_| ()),
+    }
 }
 
 pub fn download(r: &Release) -> Result<Vec<u8>, String> {
@@ -280,22 +320,36 @@ fn find(vid: u16, pid: u16, usage_page: Option<u16>) -> Option<hid::Collection> 
     hid::collections(vid, pid).into_iter().find(|c| usage_page.is_none_or(|u| c.usage_page == u))
 }
 
-/// The whole update: restart into the bootloader, flash, restart.
-pub fn update(src: &Source, image: &[u8], progress: &dyn Fn(&str, f32)) -> Result<(), String> {
+/// The whole update: restart into the bootloader, flash, restart. Returns what to tell the
+/// user once it's done.
+pub fn update(src: &Source, image: &[u8], what: &str, progress: &dyn Fn(&str, f32)) -> Result<String, String> {
+    match src.method {
+        Method::Holtek { boot_message, isp_vendor_id, isp_product_id } => {
+            update_holtek(src, boot_message, isp_vendor_id, isp_product_id, image, progress)?;
+            Ok(format!("Installed {what}. The keyboard restarted with the new firmware."))
+        }
+        Method::Sinowealth { chip } => {
+            super::sinowealth::update(src.vendor_id, src.product_id, chip, image, progress)?;
+            Ok(format!("Installed {what}. Unplug the keyboard and plug it back in to start the new firmware."))
+        }
+    }
+}
+
+fn update_holtek(src: &Source, boot_message: &[u8], isp_vendor_id: u16, isp_product_id: u16, image: &[u8], progress: &dyn Fn(&str, f32)) -> Result<(), String> {
     check_image(image)?;
-    if find(src.isp_vendor_id, src.isp_product_id, None).is_none() {
+    if find(isp_vendor_id, isp_product_id, None).is_none() {
         let raw = find(src.vendor_id, src.product_id, Some(super::via::USAGE_PAGE)).ok_or("The keyboard isn't connected.")?;
         progress("Restarting into the bootloader", 0.0);
         let dev = hid::open_io(&raw.path)?;
         let mut msg = vec![0u8; (raw.output_len as usize).max(33)];
-        let n = src.boot_message.len().min(32);
-        msg[1..1 + n].copy_from_slice(&src.boot_message[..n]);
+        let n = boot_message.len().min(32);
+        msg[1..1 + n].copy_from_slice(&boot_message[..n]);
         let _ = dev.write(&msg, 500); // it may drop off USB before the write completes
         drop(dev);
     }
     let start = Instant::now();
     let isp = loop {
-        if let Some(c) = find(src.isp_vendor_id, src.isp_product_id, None) {
+        if let Some(c) = find(isp_vendor_id, isp_product_id, None) {
             break c;
         }
         if start.elapsed() > Duration::from_secs(10) {
@@ -306,7 +360,7 @@ pub fn update(src: &Source, image: &[u8], progress: &dyn Fn(&str, f32)) -> Resul
     // Linux: the bootloader is a different USB device and may need its own udev rule.
     if hid::permission_problem(&isp) {
         progress("Asking for permission to use the bootloader", 0.0);
-        hid::install_udev_rules(&[(src.isp_vendor_id, src.isp_product_id)])?;
+        hid::install_udev_rules(&[(isp_vendor_id, isp_product_id)])?;
         std::thread::sleep(Duration::from_millis(1500));
     }
     std::thread::sleep(Duration::from_millis(300));

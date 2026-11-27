@@ -5,6 +5,13 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- CIY X78 running SMK: **firmware updates** from the Device page, as on the SK620. New releases of
+  [smk-ciy-x78](https://github.com/clawntl/smk-ciy-x78) are offered; OpenPeriph switches the
+  keyboard to its update mode, checks its bootloader is the known one (before erasing anything),
+  writes, reads back and checks, and then asks you to unplug and replug the keyboard. "More
+  options" can also flash a `.hex` build of your own.
+- Keyboards running SMK are labelled as SMK keyboards, not QMK ones.
+
 ## v0.6.0 (2026-11-27)
 
 - CIY X78 running [SMK](https://github.com/clawntl/smk-ciy-x78) firmware (0.2.0 or newer): shown

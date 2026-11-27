@@ -390,12 +390,7 @@ impl OpenPeriphApp {
                 let _ = tx.send(Msg::Firmware(i, FwMsg::Progress(stage.to_string(), f)));
             };
             let result = (|| {
-                if let (Some((l, r, c)), Some(p)) = (shape, &raw_path) {
-                    report("Saving your settings", 0.0);
-                    if let Ok(d) = qmk::read_default_keymap(p, l, r, c) {
-                        let _ = tx.send(Msg::Firmware(i, FwMsg::Defaults(d)));
-                    }
-                }
+                // the file first: nothing on the keyboard changes until it has checked out
                 let (image, what) = match &file {
                     Some(p) => (std::fs::read(p).map_err(|e| e.to_string())?, p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()),
                     None => {
@@ -404,8 +399,14 @@ impl OpenPeriphApp {
                         (firmware::download(r)?, r.tag.clone())
                     }
                 };
-                firmware::update(src, &image, &report)?;
-                Ok(format!("Installed {what}. The keyboard restarted with the new firmware."))
+                firmware::check_file(src, &image)?;
+                if let (Some((l, r, c)), Some(p)) = (shape, &raw_path) {
+                    report("Saving your settings", 0.0);
+                    if let Ok(d) = qmk::read_default_keymap(p, l, r, c) {
+                        let _ = tx.send(Msg::Firmware(i, FwMsg::Defaults(d)));
+                    }
+                }
+                firmware::update(src, &image, &what, &report)
             })();
             let _ = tx.send(Msg::Firmware(i, FwMsg::Done(result)));
         });
@@ -503,7 +504,7 @@ impl OpenPeriphApp {
                                 install = true;
                             }
                         }
-                        if ui.add_enabled(connected && !demo, egui::Button::new("Flash a .bin file…")).clicked() {
+                        if ui.add_enabled(connected && !demo, egui::Button::new(format!("Flash a .{} file…", src.file_types[0]))).clicked() {
                             install_file = true;
                         }
                     });
@@ -526,7 +527,7 @@ impl OpenPeriphApp {
             self.start_update(i, None);
         }
         if install_file {
-            if let Some(p) = rfd::FileDialog::new().add_filter("Firmware", &["bin"]).set_title("Flash firmware").pick_file() {
+            if let Some(p) = rfd::FileDialog::new().add_filter("Firmware", src.file_types).set_title("Flash firmware").pick_file() {
                 self.start_update(i, Some(p));
             }
         }
@@ -541,8 +542,9 @@ impl OpenPeriphApp {
                 continue;
             }
             let def = defs.iter().find(|d| (d.vendor_id, d.product_id) == (c.vendor_id, c.product_id)).cloned();
-            let name = if c.product.is_empty() { format!("QMK keyboard {:04X}:{:04X}", c.vendor_id, c.product_id) } else { c.product.clone() };
-            let maker = if c.manufacturer.is_empty() { "QMK".to_string() } else { c.manufacturer.clone() };
+            let fw = firmware::firmware_name(c.vendor_id, c.product_id);
+            let name = if c.product.is_empty() { format!("{fw} keyboard {:04X}:{:04X}", c.vendor_id, c.product_id) } else { c.product.clone() };
+            let maker = if c.manufacturer.is_empty() { fw.to_string() } else { c.manufacturer.clone() };
             let driver = QmkDriver::new(c.vendor_id, c.product_id, c.serial.clone(), name, maker, def);
             let mut entry = DeviceEntry::new(Arc::new(driver));
             entry.connected = None;

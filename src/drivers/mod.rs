@@ -17,7 +17,8 @@ pub fn all() -> Vec<Arc<dyn Driver>> {
         let (vid, pid) = (d.vendor_id, d.product_id);
         // an imported definition for the same keyboard wins
         let d = crate::qmk::definition::all_definitions().into_iter().find(|x| (x.vendor_id, x.product_id) == (vid, pid)).unwrap_or(d);
-        v.push(Arc::new(qmk::QmkDriver::new(vid, pid, String::new(), String::new(), "QMK".into(), Some(d))));
+        let maker = crate::qmk::firmware::source_for(vid, pid).map(|s| s.maker).unwrap_or("QMK");
+        v.push(Arc::new(qmk::QmkDriver::new(vid, pid, String::new(), String::new(), maker.into(), Some(d))));
     }
     v
 }

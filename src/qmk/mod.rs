@@ -12,6 +12,7 @@ pub mod keycodes;
 mod keycodes_table;
 pub mod macros;
 pub mod menus;
+pub mod sinowealth;
 pub mod via;
 
 use std::collections::HashMap;

@@ -32,6 +32,11 @@ impl QmkDriver {
         }
     }
 
+    /// The firmware it runs: "QMK", or "SMK" for keyboards we know run that.
+    pub fn firmware_name(&self) -> &'static str {
+        qmk::firmware::firmware_name(self.info.vendor_id, self.info.product_id)
+    }
+
     pub fn definition(&self) -> Option<Arc<Definition>> {
         self.definition.read().ok().and_then(|d| d.clone())
     }

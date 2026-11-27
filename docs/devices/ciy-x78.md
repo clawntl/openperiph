@@ -26,6 +26,14 @@ SMK. From its version 0.2.0 it speaks VIA, and OpenPeriph shows the keyboard as
 can be read back), and lighting (effect, brightness, speed and a colour for the solid effect).
 The definition is bundled (`definitions/ciy_x78_smk_iso.json`).
 
+**Firmware updates**: the Device page offers new releases of smk-ciy-x78, as for the SK620. The
+update goes through the keyboard's own update mode (its ISP bootloader, with the protocol of
+[sinowisp](https://github.com/karstx/sinowisp)): OpenPeriph first reads the bootloader and only
+carries on if it is the one we know (MD5 `571ea8b3…`); it never writes the bootloader. After
+writing, it reads everything back and checks it before letting the new firmware start. This
+bootloader doesn't restart the keyboard, so unplug it and plug it back in when asked. The keymap
+is kept in the keyboard's data flash, which updates don't touch.
+
 SMK has no free USB endpoint for QMK's usual raw HID interface, so it carries VIA's messages as
 feature report 8 on its second interface. OpenPeriph uses that automatically for any VIA
 interface with a 33-byte feature report and no output report.

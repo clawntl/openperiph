@@ -69,7 +69,7 @@ pub struct HidTransport {
 /// Whether a VIA collection takes its messages as feature reports: it has no output report to
 /// write to, only a feature report big enough for a message.
 pub fn uses_feature_reports(c: &hid::Collection) -> bool {
-    c.output_len == 0 && c.feature_len as usize >= MSG_LEN + 1
+    c.output_len == 0 && c.feature_len as usize > MSG_LEN
 }
 
 impl HidTransport {

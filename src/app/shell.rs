@@ -206,7 +206,7 @@ impl OpenPeriphApp {
         let info = d.driver.info();
         let y = rect.min.y + 186.0;
         p.text(Pos2::new(rect.min.x + 18.0, y), Align2::LEFT_TOP, &info.name, FontId::new(15.0, theme::semibold()), TEXT);
-        let what = if d.driver.capabilities().qmk { "QMK keyboard".to_string() } else { info.kind.name().to_string() };
+        let what = kind_text(d.driver.as_ref());
         p.text(Pos2::new(rect.min.x + 18.0, y + 22.0), Align2::LEFT_TOP, format!("{} · {what}", info.maker), FontId::proportional(12.0), TEXT_DIM);
         let (txt, col) = self.device_state(i);
         let g = p.layout_no_wrap(txt.to_string(), FontId::proportional(11.5), col);
@@ -311,7 +311,7 @@ impl OpenPeriphApp {
         let info = d.driver.info().clone();
         ui.add_space(4.0);
         ui.label(RichText::new(&info.name).size(14.0).family(theme::semibold()).color(TEXT));
-        let what = if d.driver.capabilities().qmk { "QMK keyboard" } else { info.kind.name() };
+        let what = kind_text(d.driver.as_ref());
         ui.label(small(format!("{what} · {:04X}:{:04X}", info.vendor_id, info.product_id)));
         let (txt, col) = self.device_state(i);
         ui.horizontal(|ui| {
@@ -357,7 +357,7 @@ impl OpenPeriphApp {
         let info = self.devices[i].driver.info().clone();
         let ctx = ui.ctx().clone();
         let mut clicked = false;
-        let what = if self.devices[i].driver.capabilities().qmk { "QMK keyboard" } else { info.kind.name() };
+        let what = kind_text(self.devices[i].driver.as_ref());
         theme::card(ui, |ui| {
             let wide = ui.available_width() > 640.0;
             let mut body = |ui: &mut Ui| {
@@ -539,7 +539,10 @@ impl OpenPeriphApp {
                         let info = d.driver.info();
                         let demo = d.driver.as_qmk().is_some_and(|q| q.demo);
                         ui.label(RichText::new(format!("{}{}", info.name, if demo { " (simulated)" } else { "" })).color(TEXT));
-                        ui.label(dim(if d.driver.capabilities().qmk { "Keyboard · QMK/VIA".to_string() } else { info.kind.name().to_string() }));
+                        ui.label(dim(match d.driver.as_qmk() {
+                            Some(q) => format!("Keyboard · {}/VIA", q.firmware_name()),
+                            None => info.kind.name().to_string(),
+                        }));
                         ui.label(dim(format!("{:04X}:{:04X}", info.vendor_id, info.product_id)));
                         let (t, c) = match d.connected {
                             Some(true) => ("Connected", GOOD),
@@ -757,5 +760,13 @@ fn tile_grid(ui: &mut Ui, tiles: &[(&str, String)]) {
             }
         });
         ui.add_space(gap - 6.0);
+    }
+}
+
+/// "Mouse", "Keyboard", or for VIA keyboards the firmware they run ("QMK keyboard", "SMK keyboard").
+fn kind_text(d: &dyn crate::device::Driver) -> String {
+    match d.as_qmk() {
+        Some(q) => format!("{} keyboard", q.firmware_name()),
+        None => d.info().kind.name().to_string(),
     }
 }
