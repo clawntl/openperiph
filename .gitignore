@@ -2,3 +2,4 @@
 /shots
 *.pdb
 /dist
+/.ci-cargo
