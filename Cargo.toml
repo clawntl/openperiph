@@ -3,6 +3,8 @@ name = "openperiph"
 version = "0.5.0"
 edition = "2021"
 description = "Open settings app for PC peripherals (QMK/VIA keyboards, CIY X78 keyboard, Attack Shark R5 ULTRA mouse) without the vendor software, for Windows and Linux"
+# Only these affect the build (keeps cargo from looking into makepkg's folders in packaging/).
+include = ["/src", "/assets", "/definitions", "/build.rs", "/Cargo.toml", "/Cargo.lock"]
 
 [dependencies]
 eframe = "0.37.0"
