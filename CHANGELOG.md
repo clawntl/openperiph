@@ -6,9 +6,11 @@ version, and the section becomes the release notes on GitHub.
 ## Unreleased
 
 - CIY X78 on SMK: fixed updates stopping with "The keyboard didn't switch to its update mode".
-  The keyboard did switch, but OpenPeriph looked for the update mode by the sizes of its
-  messages; it now goes by their report numbers (5 and 6), as sinowisp does. If it still can't
-  use it, the message now says what it saw. Nothing on the keyboard is changed in that case.
+  The keyboard did switch, but on Linux the kernel's HID driver doesn't take its update mode, so
+  there was nothing for OpenPeriph to open. OpenPeriph now talks to it over raw USB in that case
+  (as sinowisp does), asking once for permission to use it. The update mode is also found by its
+  report numbers (5 and 6) rather than their sizes. If it still can't be used, the message says
+  what was seen, and nothing on the keyboard is changed.
 - During an update the keyboard's page stays open, instead of going back to Home when the
   keyboard drops off USB into its update mode.
 

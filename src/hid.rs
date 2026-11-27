@@ -623,10 +623,27 @@ pub fn udev_rule(vid: u16, pid: u16) -> String {
 /// password in a system window, then reloads udev. Linux only.
 #[cfg(target_os = "linux")]
 pub fn install_udev_rules(ids: &[(u16, u16)]) -> Result<(), String> {
+    install_rule_lines(&ids.iter().map(|&(v, p)| udev_rule(v, p)).collect::<Vec<_>>())
+}
+
+/// The rule line that lets the signed-in person use a whole USB device (its usbfs node), for
+/// devices the HID driver doesn't take.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn usb_udev_rule(vid: u16, pid: u16) -> String {
+    format!("SUBSYSTEM==\"usb\", ATTRS{{idVendor}}==\"{vid:04x}\", ATTRS{{idProduct}}==\"{pid:04x}\", MODE=\"0660\", TAG+=\"uaccess\"")
+}
+
+#[cfg(target_os = "linux")]
+pub fn install_usb_udev_rules(ids: &[(u16, u16)]) -> Result<(), String> {
+    install_rule_lines(&ids.iter().map(|&(v, p)| usb_udev_rule(v, p)).collect::<Vec<_>>())
+}
+
+#[cfg(target_os = "linux")]
+fn install_rule_lines(lines: &[String]) -> Result<(), String> {
     let existing = std::fs::read_to_string(UDEV_RULES).unwrap_or_default();
     let mut text = if existing.is_empty() { "# OpenPeriph: let the signed-in user talk to these devices' HID interfaces\n".to_string() } else { existing.clone() };
-    for &(v, p) in ids {
-        let line = udev_rule(v, p);
+    for line in lines {
+        let line = line.clone();
         if !existing.contains(&line) {
             if !text.ends_with('\n') {
                 text.push('\n');
@@ -640,7 +657,8 @@ pub fn install_udev_rules(ids: &[(u16, u16)]) -> Result<(), String> {
     }
     let tmp = std::env::temp_dir().join("openperiph-udev.rules");
     std::fs::write(&tmp, &text).map_err(|e| e.to_string())?;
-    let script = format!("install -m 0644 '{}' '{}' && udevadm control --reload && udevadm trigger --subsystem-match=hidraw", tmp.display(), UDEV_RULES);
+    let script =
+        format!("install -m 0644 '{}' '{}' && udevadm control --reload && udevadm trigger --subsystem-match=hidraw --subsystem-match=usb", tmp.display(), UDEV_RULES);
     let status = std::process::Command::new("pkexec")
         .args(["sh", "-c", &script])
         .status()

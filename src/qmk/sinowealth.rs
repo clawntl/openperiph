@@ -281,6 +281,10 @@ impl IspLink for HidIsp {
 
 /// Whether a keyboard is sitting in its update mode (the bootloader's USB device is present).
 pub fn in_update_mode() -> bool {
+    #[cfg(target_os = "linux")]
+    if crate::usbfs::find(ISP_VENDOR_ID, &ISP_PRODUCT_IDS).is_some() {
+        return true;
+    }
     ISP_PRODUCT_IDS.iter().any(|p| !hid::collections(ISP_VENDOR_ID, *p).is_empty())
 }
 
@@ -319,7 +323,7 @@ fn update_mode_report() -> String {
             })
             .unwrap_or(false);
         return if usb {
-            "The keyboard's update mode (USB 0603:1020) is on USB, but has no HID device; see `sudo dmesg | tail`.".into()
+            "The keyboard's update mode (USB 0603:1020) is on USB, but couldn't be used; see `sudo dmesg | tail`.".into()
         } else {
             "No update-mode device (USB 0603:1020) appeared.".into()
         };
@@ -348,7 +352,9 @@ pub fn update(vendor_id: u16, product_id: u16, chip: &Chip, image: &[u8], progre
     }
     let start = Instant::now();
     let mut asked = false;
-    let (cmd, xfer) = loop {
+    #[cfg(target_os = "linux")]
+    let mut raw_seen = 0u32;
+    loop {
         if let Some((cmd, xfer)) = find_isp(chip) {
             // Linux: the update mode is another USB device, which may need its own udev rule
             if !asked && hid::permission_problem(&cmd) {
@@ -358,7 +364,32 @@ pub fn update(vendor_id: u16, product_id: u16, chip: &Chip, image: &[u8], progre
                 std::thread::sleep(Duration::from_millis(1500));
                 continue;
             }
-            break (cmd, xfer);
+            std::thread::sleep(Duration::from_millis(300));
+            let mut link = HidIsp::open(&cmd, &xfer)?;
+            return flash_with(&mut link, chip, &image, progress);
+        }
+        // Linux: the kernel's HID driver may not take the update mode at all (no hidraw node
+        // appears), so its reports go as raw USB control requests instead. Seen twice in a
+        // row, so a HID driver still binding gets its chance first.
+        #[cfg(target_os = "linux")]
+        if let Some(node) = crate::usbfs::find(ISP_VENDOR_ID, &ISP_PRODUCT_IDS) {
+            raw_seen += 1;
+            if raw_seen >= 2 {
+                match crate::usbfs::Device::open(&node, 0) {
+                    Ok(dev) => {
+                        let mut link = UsbIsp(dev);
+                        return flash_with(&mut link, chip, &image, progress);
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && !asked => {
+                        asked = true;
+                        progress("Asking for permission to use the keyboard's update mode", 0.0);
+                        hid::install_usb_udev_rules(&ISP_PRODUCT_IDS.map(|p| (ISP_VENDOR_ID, p)))?;
+                        std::thread::sleep(Duration::from_millis(1500));
+                        continue;
+                    }
+                    Err(e) => return Err(format!("Couldn't open the keyboard's update mode ({e}), so nothing was changed. Unplug the keyboard and plug it back in.")),
+                }
+            }
         }
         if start.elapsed() > Duration::from_secs(10) {
             return Err(format!(
@@ -367,10 +398,25 @@ pub fn update(vendor_id: u16, product_id: u16, chip: &Chip, image: &[u8], progre
             ));
         }
         std::thread::sleep(Duration::from_millis(300));
-    };
-    std::thread::sleep(Duration::from_millis(300));
-    let mut link = HidIsp::open(&cmd, &xfer)?;
-    flash_with(&mut link, chip, &image, progress)
+    }
+}
+
+/// The update mode over raw USB (Linux, when no HID driver has it).
+#[cfg(target_os = "linux")]
+struct UsbIsp(crate::usbfs::Device);
+
+#[cfg(target_os = "linux")]
+impl IspLink for UsbIsp {
+    fn send(&mut self, report: &[u8]) -> Result<(), String> {
+        self.0.set_feature(report).map_err(|e| format!("The keyboard's update mode didn't accept a message ({e})."))
+    }
+    fn get(&mut self, buf: &mut [u8]) -> Result<(), String> {
+        let n = self.0.get_feature(buf).map_err(|e| format!("The keyboard's update mode didn't answer ({e})."))?;
+        if n < buf.len() {
+            return Err(format!("The keyboard's update mode sent {n} bytes instead of {}.", buf.len()));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

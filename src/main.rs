@@ -14,6 +14,8 @@ mod net;
 mod qmk;
 mod selfupdate;
 mod store;
+#[cfg(target_os = "linux")]
+mod usbfs;
 
 use std::path::PathBuf;
 
