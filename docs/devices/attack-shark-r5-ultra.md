@@ -20,6 +20,13 @@ OpenPeriph also shows the battery level and the mouse's firmware version. Change
 
 ## Notes
 
+**High-Speed Mode** (the driver's "HyperMode") isn't included. Attack Shark's driver has it, but
+their model list turns it off for the R5 Ultra, so their own driver never shows it either. Their
+description says only that it improves performance, uses more power, and can't be used with 2K,
+4K or 8K polling. If a firmware update turns it on for this mouse, it could be added with the same
+kind of switch (`02 01 0B`, read `02 01 8B`).
+
+
 The protocol comes from Attack Shark's own web driver, plus facts documented by
 [Shark Deck](https://github.com/alexandrewillame/shark-deck). No code from either is included.
 Details: [protocols/attack-shark-r5-ultra.md](../protocols/attack-shark-r5-ultra.md).
