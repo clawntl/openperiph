@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.5.2 (2026-11-27)
+
 - CIY X78: the Enter key is drawn as the ISO Enter it is (L-shaped, over two rows).
 - CIY X78: every key with a Shift character shows it above the key's own one, as on the caps
   (UK layout: ¬ ! " £ $ % ^ & * ( ) _ + { } : @ ~ | < > ?).
