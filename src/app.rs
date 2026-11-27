@@ -776,6 +776,11 @@ impl OpenPeriphApp {
             if custom {
                 p.text(r.center() - Vec2::new(0.0, fs * 0.55), Align2::CENTER_CENTER, k.label, FontId::proportional(fs * 0.85), TEXT_DIM);
                 p.text(r.center() + Vec2::new(0.0, fs * 0.6), Align2::CENTER_CENTER, action.short(), FontId::proportional(fs * 0.8), ACCENT);
+            } else if let Some(sh) = k.shifted {
+                // Shift character above the key's own one, as printed on the cap
+                let colour = if k.locked { TEXT_DIM } else { Color32::WHITE };
+                p.text(r.center() - Vec2::new(0.0, fs * 0.55), Align2::CENTER_CENTER, sh, FontId::proportional(fs), colour);
+                p.text(r.center() + Vec2::new(0.0, fs * 0.55), Align2::CENTER_CENTER, k.label, FontId::proportional(fs), colour);
             } else {
                 p.text(r.center(), Align2::CENTER_CENTER, k.label, FontId::proportional(fs), if k.locked { TEXT_DIM } else { Color32::WHITE });
             }
@@ -795,7 +800,17 @@ impl OpenPeriphApp {
         };
         let fn_layer = self.fn_layer;
         let d = &mut self.devices[self.selected];
-        let label = d.driver.layout().keys.iter().find(|k| k.id == key_id).map(|k| k.label).unwrap_or("?");
+        let label = d
+            .driver
+            .layout()
+            .keys
+            .iter()
+            .find(|k| k.id == key_id)
+            .map(|k| match k.shifted {
+                Some(sh) => format!("{} {sh}", k.label),
+                None => k.label.to_string(),
+            })
+            .unwrap_or_else(|| "?".into());
         let default_text = d.driver.default_description(key_id, fn_layer);
         let map = if fn_layer { &mut d.keys.fn_layer } else { &mut d.keys.normal };
         let mut action = map.get(&key_id).copied().unwrap_or_default();
