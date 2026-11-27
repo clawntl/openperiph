@@ -169,8 +169,11 @@ pub fn install(r: &AppRelease, kind: &InstallKind, progress: &dyn Fn(&str, f32))
             std::fs::write(&file, &data).map_err(|e| format!("Couldn't save the installer: {e}"))?;
             // the same install mode as before: per user, or for everyone (then Windows asks)
             let per_user = std::env::current_exe().map(|e| writable_dir(&e)).unwrap_or(true);
+            // a log, for when it goes wrong: %TEMP%\openperiph-setup.log
+            let log = std::env::temp_dir().join("openperiph-setup.log");
             std::process::Command::new(&file)
                 .args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", if per_user { "/CURRENTUSER" } else { "/ALLUSERS" }])
+                .arg(format!("/LOG={}", log.display()))
                 .spawn()
                 .map_err(|e| format!("Couldn't start the installer: {e}"))?;
             // The installer replaces this program and starts the new one.

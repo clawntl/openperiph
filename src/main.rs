@@ -21,7 +21,19 @@ use std::path::PathBuf;
 
 use eframe::egui;
 
+/// Held while OpenPeriph runs, so the Windows installer can wait for it to quit before replacing
+/// it (see `packaging/windows/openperiph.iss`).
+#[cfg(windows)]
+fn hold_running_mutex() {
+    use windows_sys::Win32::System::Threading::CreateMutexW;
+    let name: Vec<u16> = "OpenPeriph.Running".encode_utf16().chain(std::iter::once(0)).collect();
+    // never closed: Windows releases it when the process ends
+    let _ = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+}
+
 fn main() -> eframe::Result<()> {
+    #[cfg(windows)]
+    hold_running_mutex();
     let mut args = std::env::args().skip(1);
     let mut screenshot: Option<PathBuf> = None;
     // Hidden option for checks: --page lighting | mouse | macros | settings

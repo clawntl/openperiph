@@ -32,7 +32,8 @@ UninstallDisplayName=OpenPeriph
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
-CloseApplications=yes
+; force: a silent update must not stop to ask about files in use
+CloseApplications=force
 RestartApplications=no
 
 [Tasks]
@@ -46,6 +47,26 @@ Source: "..\..\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\OpenPeriph"; Filename: "{app}\openperiph.exe"
 Name: "{autodesktop}\OpenPeriph"; Filename: "{app}\openperiph.exe"; Tasks: desktopicon
+
+[Code]
+// OpenPeriph starts this installer to update itself and quits straight away. Wait until it's
+// really gone (it holds the mutex below while running), so openperiph.exe isn't in use when
+// it's replaced; a silent install that finds it in use gives up, and nothing starts again.
+function InitializeSetup(): Boolean;
+var
+  Waited: Integer;
+begin
+  // versions before 0.6.5 don't hold the mutex: give them a moment to exit as well
+  if WizardSilent then
+    Sleep(2000);
+  Waited := 0;
+  while CheckForMutexes('OpenPeriph.Running') and (Waited < 20000) do
+  begin
+    Sleep(250);
+    Waited := Waited + 250;
+  end;
+  Result := True;
+end;
 
 [Run]
 ; Also runs after a silent install (how OpenPeriph updates itself), so the app comes back.
