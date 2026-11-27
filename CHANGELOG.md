@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.6.6 (2026-11-27)
+
 - A keyboard that has only just been plugged in is read again a few times before OpenPeriph says
   it can't be read (on Windows its interfaces come up one by one, so the first try could fail
   for a second or two).
