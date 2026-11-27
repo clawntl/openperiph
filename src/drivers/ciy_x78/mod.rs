@@ -1,5 +1,5 @@
 //! Driver for the CIY X78 keyboard (USB 258A:0016).
-//! Every number here is written down, with where it came from, in MECHANICS.md.
+//! Every number here is written down, with where it came from, in docs/protocols/ciy-x78.md.
 
 mod layout;
 

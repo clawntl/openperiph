@@ -1,7 +1,7 @@
 //! How OpenPeriph looks: colours, fonts, the background picture, frosted-glass panels, line icons
 //! and drawings of the hardware.
 //!
-//! The background is drawn once when the app starts (a smoky nebula made from noise, or a picture
+//! The background is drawn once when the app starts (plain, faint smoke made from noise, or a picture
 //! of your own). A blurred copy of it is kept too: panels draw the part of the blurred copy that is
 //! behind them under a dark tint, which is what makes them look like frosted glass.
 
@@ -14,22 +14,22 @@ use std::sync::Arc;
 // ---------------------------------------------------------------------------------------------
 // Colours
 
-pub const BG: Color32 = Color32::from_rgb(8, 12, 10);
-pub const BG1: Color32 = Color32::from_rgb(15, 23, 18);
-pub const BG2: Color32 = Color32::from_rgb(21, 32, 26);
-pub const BG3: Color32 = Color32::from_rgb(29, 43, 35);
-pub const LINE: Color32 = Color32::from_rgb(37, 56, 45);
-pub const TEXT: Color32 = Color32::from_rgb(230, 240, 234);
-pub const TEXT_DIM: Color32 = Color32::from_rgb(150, 171, 159);
-pub const TEXT_MUT: Color32 = Color32::from_rgb(98, 119, 107);
-pub const ACCENT: Color32 = Color32::from_rgb(94, 224, 138);
+pub const BG: Color32 = Color32::from_rgb(18, 21, 28);
+pub const BG1: Color32 = Color32::from_rgb(24, 28, 37);
+pub const BG2: Color32 = Color32::from_rgb(28, 33, 43);
+pub const BG3: Color32 = Color32::from_rgb(36, 42, 54);
+pub const LINE: Color32 = Color32::from_rgb(46, 53, 67);
+pub const TEXT: Color32 = Color32::from_rgb(232, 236, 242);
+pub const TEXT_DIM: Color32 = Color32::from_rgb(152, 161, 176);
+pub const TEXT_MUT: Color32 = Color32::from_rgb(104, 113, 130);
+pub const ACCENT: Color32 = Color32::from_rgb(142, 230, 168);
 /// The second colour, used with the accent in gradients.
-pub const SECOND: Color32 = Color32::from_rgb(46, 196, 182);
-pub const GOOD: Color32 = Color32::from_rgb(132, 232, 166);
+pub const SECOND: Color32 = Color32::from_rgb(120, 162, 236);
+pub const GOOD: Color32 = Color32::from_rgb(120, 220, 150);
 pub const WARN: Color32 = Color32::from_rgb(255, 184, 84);
 pub const BAD: Color32 = Color32::from_rgb(255, 96, 104);
 /// A button or key at rest.
-pub const KEYCAP: Color32 = Color32::from_rgb(30, 43, 36);
+pub const KEYCAP: Color32 = Color32::from_rgb(40, 46, 58);
 
 /// The semi-bold font, for titles.
 pub fn semibold() -> FontFamily {
@@ -92,7 +92,7 @@ pub fn install(ctx: &egui::Context) {
     w.noninteractive.corner_radius = CornerRadius::same(7);
     for (s, fill, text) in [
         (&mut w.inactive, KEYCAP, TEXT),
-        (&mut w.hovered, Color32::from_rgb(40, 58, 48), Color32::WHITE),
+        (&mut w.hovered, Color32::from_rgb(52, 60, 75), Color32::WHITE),
         (&mut w.active, ACCENT.gamma_multiply(0.8), Color32::BLACK),
         (&mut w.open, BG3, TEXT),
     ] {
@@ -104,10 +104,10 @@ pub fn install(ctx: &egui::Context) {
         s.expansion = 0.0;
     }
     w.inactive.bg_stroke = Stroke::new(1.0, Color32::from_white_alpha(16));
-    w.inactive.bg_fill = Color32::from_rgb(36, 52, 43);
+    w.inactive.bg_fill = Color32::from_rgb(44, 51, 64);
     w.inactive.weak_bg_fill = Color32::from_rgba_unmultiplied(255, 255, 255, 10);
     w.hovered.weak_bg_fill = Color32::from_rgba_unmultiplied(255, 255, 255, 18);
-    w.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(94, 224, 138, 90));
+    w.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgba_unmultiplied(142, 230, 168, 90));
     ctx.set_visuals(v);
     ctx.all_styles_mut(|s| {
         s.text_styles = [
@@ -147,23 +147,23 @@ fn backdrop_id() -> egui::Id {
     egui::Id::unique("openperiph-backdrop")
 }
 
-/// Which background to use: the nebula, none, or a picture.
+/// Which background to use: faint smoke, none, or a picture.
 pub enum BackgroundChoice {
-    Nebula,
+    Smoke,
     Plain,
     Picture(std::path::PathBuf),
 }
 
 /// Makes (or removes) the background. Returns an error when a picture couldn't be read; the
-/// nebula is used instead then.
+/// smoke is used instead then.
 pub fn set_background(ctx: &egui::Context, choice: &BackgroundChoice) -> Result<(), String> {
     let (w, h, mut pixels, err) = match choice {
         BackgroundChoice::Plain => {
             ctx.data_mut(|d| d.remove::<Backdrop>(backdrop_id()));
             return Ok(());
         }
-        BackgroundChoice::Nebula => {
-            let (w, h, p) = nebula(720, 432);
+        BackgroundChoice::Smoke => {
+            let (w, h, p) = smoke(720, 432);
             (w, h, p, None)
         }
         BackgroundChoice::Picture(path) => match load_picture(path, 1280) {
@@ -175,7 +175,7 @@ pub fn set_background(ctx: &egui::Context, choice: &BackgroundChoice) -> Result<
                 (w, h, p, None)
             }
             Err(e) => {
-                let (w, h, p) = nebula(720, 432);
+                let (w, h, p) = smoke(720, 432);
                 (w, h, p, Some(e))
             }
         },
@@ -350,12 +350,12 @@ fn fbm(mut x: f32, mut y: f32, seed: u32) -> f32 {
     sum
 }
 
-/// A dark mist in green and teal, with a few stars. Linear RGB, 0–1.
-fn nebula(w: usize, h: usize) -> (usize, usize, Vec<[f32; 3]>) {
-    let base = [0.003f32, 0.006, 0.004];
-    let teal = [0.0f32, 0.34, 0.30];
-    let green = [0.06f32, 0.40, 0.10];
-    let blue = [0.002f32, 0.010, 0.007];
+/// Faint grey smoke on navy-grey, with a few stars. Linear RGB, 0–1.
+fn smoke(w: usize, h: usize) -> (usize, usize, Vec<[f32; 3]>) {
+    let base = [0.006f32, 0.008, 0.013];
+    let teal = [0.075f32, 0.085, 0.11];
+    let green = [0.09f32, 0.095, 0.12];
+    let blue = [0.004f32, 0.006, 0.014];
     let mut px = vec![[0.0f32; 3]; w * h];
     for y in 0..h {
         for x in 0..w {
@@ -371,7 +371,7 @@ fn nebula(w: usize, h: usize) -> (usize, usize, Vec<[f32; 3]>) {
             let mut c = [0.0; 3];
             for k in 0..3 {
                 let tint = teal[k] + (green[k] - teal[k]) * ((mix - 0.3) * 2.2).clamp(0.0, 1.0);
-                c[k] = base[k] + blue[k] * deep + tint * smoke * 0.72;
+                c[k] = base[k] + blue[k] * deep + tint * smoke * 0.6;
             }
             // stars
             let s = hash(x as i32, y as i32, 99);
@@ -758,17 +758,17 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn nebula_picture() {
-        let (w, h, mut px) = nebula(720, 432);
+    fn smoke_picture() {
+        let (w, h, mut px) = smoke(720, 432);
         vignette(w, h, &mut px);
         let img = to_image(w, h, &px);
         let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| [c.r(), c.g(), c.b()]).collect();
-        image::save_buffer("/tmp/nebula.png", &bytes, w as u32, h as u32, image::ColorType::Rgb8).unwrap();
+        image::save_buffer("/tmp/smoke.png", &bytes, w as u32, h as u32, image::ColorType::Rgb8).unwrap();
     }
 
     #[test]
-    fn nebula_is_dark_enough_for_text() {
-        let (w, h, px) = nebula(160, 96);
+    fn smoke_is_dark_enough_for_text() {
+        let (w, h, px) = smoke(160, 96);
         let mean: f32 = px.iter().map(|c| (c[0] + c[1] + c[2]) / 3.0).sum::<f32>() / (w * h) as f32;
         assert!(mean < 0.12, "mean {mean}");
     }

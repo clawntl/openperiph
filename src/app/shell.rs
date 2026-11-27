@@ -43,12 +43,12 @@ impl OpenPeriphApp {
     /// Reads the background choice and makes the background.
     pub(super) fn apply_background(&mut self, ctx: &egui::Context) {
         let choice = match self.prefs.background.as_str() {
-            "plain" => theme::BackgroundChoice::Plain,
+            "smoke" => theme::BackgroundChoice::Smoke,
             "picture" => match store::picture("background") {
                 Some(p) => theme::BackgroundChoice::Picture(p),
-                None => theme::BackgroundChoice::Nebula,
+                None => theme::BackgroundChoice::Plain,
             },
-            _ => theme::BackgroundChoice::Nebula,
+            _ => theme::BackgroundChoice::Plain,
         };
         if let Err(e) = theme::set_background(ctx, &choice) {
             self.set_status(e, false);
@@ -564,20 +564,20 @@ impl OpenPeriphApp {
 
     fn appearance(&mut self, ui: &mut Ui) {
         ui.label(title("Appearance"));
-        ui.label(dim("The picture behind the panels."));
+        ui.label(dim("What's behind the panels. With smoke or a picture, the panels are see-through."));
         ui.add_space(6.0);
         let cur = match self.prefs.background.as_str() {
-            "plain" => 1,
+            "smoke" => 1,
             "picture" => 2,
             _ => 0,
         };
         let mut choice = None;
         ui.horizontal(|ui| {
-            if super::segment(ui, "Nebula", cur == 0) {
-                choice = Some("nebula");
-            }
-            if super::segment(ui, "Plain", cur == 1) {
+            if super::segment(ui, "Plain", cur == 0) {
                 choice = Some("plain");
+            }
+            if super::segment(ui, "Smoke", cur == 1) {
+                choice = Some("smoke");
             }
             if super::segment(ui, "Your picture…", cur == 2) {
                 choice = Some("picture");
@@ -611,7 +611,7 @@ impl OpenPeriphApp {
 fn logo(p: &egui::Painter, r: Rect) {
     let c = r.center();
     let rad = r.width() / 2.0 - 1.0;
-    // a ring that fades from green to teal, and a dot
+    // a ring that fades from green to blue, and a dot
     let n = 40;
     for k in 0..n {
         let a0 = (k as f32 / n as f32) * std::f32::consts::TAU - 1.2;

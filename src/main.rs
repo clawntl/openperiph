@@ -3,7 +3,7 @@
 //! OpenPeriph: a simple settings app for PC devices, for Windows and Linux. Supported: any QMK
 //! keyboard with VIA (keymap, macros, lighting), the CIY X78 keyboard (key remapping and
 //! lighting) and the Attack Shark R5 ULTRA mouse (DPI, polling, sensor, power).
-//! See MECHANICS.md for how the app talks to each.
+//! See docs/protocols/ for how the app talks to each.
 
 mod app;
 mod device;

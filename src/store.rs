@@ -70,7 +70,7 @@ pub fn import_definition(text: &str, vendor_id: u16, product_id: u16) -> Result<
 /// App-wide choices.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Prefs {
-    /// "nebula" (or empty), "plain" or "picture".
+    /// "plain" (or empty), "smoke" or "picture".
     #[serde(default)]
     pub background: String,
 }

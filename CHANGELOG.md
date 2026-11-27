@@ -5,22 +5,24 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
-## v0.3.0 (2026-11-27)
+## v0.3.0
 
-- New look: a dark green and teal background behind frosted-glass panels, the Inter typeface,
-  smaller and tidier controls, and line icons.
+- New look: a neutral navy-grey theme with pale green buttons, the Inter typeface, smaller and
+  tidier controls, and line icons.
 - A tab for each plugged-in device along the top, and a Home page with a card for each one.
 - Each device has its own navigation (Keymap, Lighting, Macros, Performance, Device) with a
   picture of it: drawn from its real key layout (in its current lighting colour for QMK
   keyboards), or a photo of your own (Device page → Picture).
-- Appearance (About page): the nebula, a plain background, or a picture of your own.
-- Asks whether to update when newer SK620 firmware or a newer OpenPeriph is found, showing the
-  release notes; readable progress bars, shown on every page while the keyboard updates.
+- Appearance (About page): plain, faint smoke, or a picture of your own behind the panels.
+- Firmware updates: asks whether to update when newer SK620 firmware is out, with the release
+  notes. The Device page shows one status line (installed → latest) and one Update button; the
+  rest is under More options. Readable progress, shown on every page while updating.
+- OpenPeriph asks whether to update itself when a new version is out.
 - Colour picker for QMK lighting: a hue × saturation area, a hex box and presets. Effects that
   make their own colours say so and offer Solid colour.
 - Only plugged-in devices are shown; About lists every supported device.
 - British spelling in labels.
-- Releases are published automatically (see README → Releases).
+- Documentation split into pages per device (`docs/`).
 
 ## v0.2.0 (2026-11-26)
 

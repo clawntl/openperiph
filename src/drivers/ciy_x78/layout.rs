@@ -2,7 +2,7 @@
 //! and which slot of the keyboard's key table ("matrix index") it lives in.
 //!
 //! Positions and slot numbers come from the original program's Cfg.ini `[KEY]` section
-//! (x1, y1, x2, y2, type, Windows key, -, matrix index, light index). See MECHANICS.md.
+//! (x1, y1, x2, y2, type, Windows key, -, matrix index, light index). See docs/protocols/ciy-x78.md.
 
 /// One physical key.
 #[derive(Clone, Copy, Debug)]

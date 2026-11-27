@@ -39,5 +39,7 @@ package() {
   install -Dm644 packaging/linux/openperiph.desktop "$pkgdir/usr/share/applications/openperiph.desktop"
   install -Dm644 packaging/linux/openperiph.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/openperiph.svg"
   install -Dm644 packaging/linux/60-openperiph.rules "$pkgdir/usr/lib/udev/rules.d/60-openperiph.rules"
-  install -Dm644 README.md MECHANICS.md -t "$pkgdir/usr/share/doc/openperiph/"
+  install -Dm644 README.md CHANGELOG.md -t "$pkgdir/usr/share/doc/openperiph/"
+  cp -r docs "$pkgdir/usr/share/doc/openperiph/"
+  chmod -R u=rwX,go=rX "$pkgdir/usr/share/doc/openperiph/docs"
 }

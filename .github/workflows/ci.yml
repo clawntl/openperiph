@@ -2,10 +2,9 @@ name: Build
 
 # Every push and pull request: test and build for Windows, Linux and Arch.
 #
-# Releasing: when main has a Cargo.toml version that has no release yet, the same run publishes
-# it (notes from CHANGELOG.md). So a release is just a commit that raises the version, made by
-# hand or by the "Release" workflow (Actions tab -> Release -> Run workflow), which does the
-# bump for you and then runs this.
+# Releasing: Actions tab -> Release -> Run workflow. That raises the version, commits it and runs
+# this with the new commit, which then publishes the release (notes from CHANGELOG.md). Ordinary
+# pushes never publish anything.
 on:
   push:
     branches: ['**']
@@ -36,8 +35,8 @@ jobs:
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           release=false
-          # release from main, or when called by the Release workflow (which passes a commit)
-          if [[ -n "${{ inputs.ref }}" || ( "$GITHUB_REF" == "refs/heads/main" && "${{ github.event_name }}" != "pull_request" ) ]]; then
+          # only when called by the Release workflow (which passes the commit to release)
+          if [[ -n "${{ inputs.ref }}" ]]; then
             if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
               echo "v$version is already released."
             else
@@ -72,7 +71,7 @@ jobs:
         run: |
           $name = "openperiph-v${{ needs.version.outputs.version }}-windows-x64"
           New-Item -ItemType Directory dist, $name | Out-Null
-          Copy-Item target/release/openperiph.exe, README.md, MECHANICS.md $name
+          Copy-Item target/release/openperiph.exe, README.md, CHANGELOG.md $name
           Compress-Archive -Path $name -DestinationPath "dist/$name.zip"
           # the bare program, which the app's own updater downloads
           Copy-Item target/release/openperiph.exe dist/openperiph.exe
@@ -81,7 +80,7 @@ jobs:
         run: |
           name="openperiph-v${{ needs.version.outputs.version }}-linux-x64"
           mkdir -p dist "$name"
-          cp target/release/openperiph README.md MECHANICS.md "$name/"
+          cp target/release/openperiph README.md CHANGELOG.md "$name/"
           tar czf "dist/$name.tar.gz" "$name"
           # the bare program, which the app's own updater downloads
           cp target/release/openperiph dist/openperiph-linux-x64

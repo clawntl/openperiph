@@ -1,6 +1,6 @@
 //! Driver for the Attack Shark R5 ULTRA mouse ("JXC" firmware, USB 373E:0046 cable /
 //! 373E:0047 receiver). Message layouts, codes and limits are written down, with their sources,
-//! in MECHANICS.md ("Attack Shark R5 ULTRA").
+//! in docs/protocols/attack-shark-r5-ultra.md.
 //!
 //! Every message is one 64-byte feature report (report id 0) on the collection with usage page
 //! 0xFFFF, usage 0:

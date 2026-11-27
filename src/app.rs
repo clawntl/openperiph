@@ -237,8 +237,11 @@ impl OpenPeriphApp {
     fn start_app_check(mut self, ctx: &egui::Context) -> Self {
         if self.screenshot_mode() {
             // no network in checks: show what an available update looks like
-            let release = crate::net::GhRelease { tag: "v9.9.9".into(), ..Default::default() };
-            self.app_release = Some(Ok(AppRelease { release, version: 0x090909 }));
+            // pretend there's an update only for the check that shows it
+            let fake = self.page == "app-update";
+            let tag = if fake { "v9.9.9".to_string() } else { format!("v{}", env!("CARGO_PKG_VERSION")) };
+            let release = crate::net::GhRelease { tag, ..Default::default() };
+            self.app_release = Some(Ok(AppRelease { release, version: if fake { 0x090909 } else { 0 } }));
             self.app_popup = self.page == "app-update";
             return self;
         }
@@ -688,9 +691,9 @@ impl OpenPeriphApp {
             let action = map.get(&k.id).copied().unwrap_or_default();
             let custom = action != KeyAction::Default;
             let selected = self.selected_key == Some(k.id);
-            let mut fill = if k.locked { Color32::from_rgb(26, 36, 30) } else { KEYCAP };
+            let mut fill = if k.locked { Color32::from_rgb(32, 36, 45) } else { KEYCAP };
             if custom {
-                fill = Color32::from_rgb(30, 76, 50);
+                fill = Color32::from_rgb(44, 72, 58);
             }
             if resp.hovered() && !k.locked {
                 fill = fill.gamma_multiply(1.25);
@@ -1256,7 +1259,7 @@ fn release_notes(ui: &mut Ui, notes: &str) {
                 if heading {
                     ui.label(RichText::new(l).family(theme::semibold()).color(theme::TEXT));
                 } else {
-                    ui.label(RichText::new(l).size(12.5).color(Color32::from_rgb(200, 214, 205)));
+                    ui.label(RichText::new(l).size(12.5).color(Color32::from_rgb(205, 211, 221)));
                 }
             }
         });
@@ -1351,7 +1354,7 @@ fn preview(ui: &mut Ui, l: &LightingState, info: &crate::device::EffectInfo, dri
     let scale = w / layout.width;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(w, layout.height * scale), Sense::hover());
     let p = ui.painter();
-    p.rect_filled(rect, CornerRadius::same(10), Color32::from_rgb(10, 15, 12));
+    p.rect_filled(rect, CornerRadius::same(10), Color32::from_rgb(14, 16, 21));
     let s = l.per_effect.get(l.effect).copied();
     let bright = s.map(|s| s.brightness as f32 / driver.max_brightness() as f32).unwrap_or(1.0);
     let t = ui.input(|i| i.time) as f32;

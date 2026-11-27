@@ -428,68 +428,93 @@ impl OpenPeriphApp {
             let installed = q.snap.as_ref().and_then(|s| s.firmware).unwrap_or(0);
             card(ui, |ui| {
                 ui.label(theme::title("Firmware"));
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Installed").color(TEXT_DIM));
-                    ui.label(if installed > 0 { firmware::version_text(installed) } else { "v1.0.0 or older (it doesn't report a version)".into() });
-                });
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Latest").color(TEXT_DIM));
-                    match (&q.fw_release, q.fw_checking) {
-                        (_, true) => {
-                            ui.spinner();
-                        }
-                        (Some(Ok(r)), _) => {
-                            ui.hyperlink_to(&r.tag, &r.page_url);
-                            if r.version > installed {
-                                pill(ui, "Update available", ACCENT);
-                            } else {
-                                pill(ui, "Up to date", super::GOOD);
-                            }
-                        }
-                        (Some(Err(e)), _) => {
-                            ui.label(RichText::new(e).color(BAD));
-                        }
-                        (None, _) => {
-                            ui.label(RichText::new("not checked yet").color(TEXT_DIM));
-                        }
-                    }
-                    if ui.small_button("Check again").clicked() {
-                        recheck = true;
-                    }
-                });
-                ui.label(
-                    RichText::new(format!("From github.com/{}. The keyboard restarts into its bootloader, is written and checked, then restarts.", src.repo))
-                        .size(11.5)
-                        .color(TEXT_DIM),
-                );
                 ui.add_space(4.0);
+                let have = if installed > 0 { firmware::version_text(installed) } else { "v1.0.0 or older".into() };
+                let rel = q.fw_release.as_ref().and_then(|r| r.as_ref().ok()).cloned();
+                let newer = rel.as_ref().is_some_and(|r| r.version > installed);
+                // where you are, in one line
+                ui.horizontal(|ui| {
+                    let (dot, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
+                    let (head, colour) = match (&q.fw_release, q.fw_checking) {
+                        (_, true) => ("Checking for updates…", TEXT_DIM),
+                        (Some(Ok(_)), _) if newer => ("Update available", ACCENT),
+                        (Some(Ok(_)), _) => ("Up to date", super::GOOD),
+                        (Some(Err(_)), _) => ("Couldn't check for updates", super::WARN),
+                        (None, _) => ("Not checked yet", TEXT_DIM),
+                    };
+                    ui.painter().circle_filled(dot.center(), 4.5, colour);
+                    ui.label(RichText::new(head).size(14.0).family(theme::semibold()).color(colour));
+                });
+                ui.horizontal(|ui| {
+                    ui.add_space(20.0);
+                    match &rel {
+                        Some(r) if newer => {
+                            ui.label(RichText::new(&have).color(TEXT_DIM));
+                            ui.label(RichText::new("→").color(TEXT_DIM));
+                            ui.label(RichText::new(&r.tag).family(theme::semibold()).color(theme::TEXT));
+                            ui.add_space(8.0);
+                            ui.hyperlink_to("What's new ›", &r.page_url);
+                        }
+                        Some(r) => {
+                            ui.label(RichText::new(format!("{} is installed", if installed > 0 { have.clone() } else { r.tag.clone() })).color(TEXT_DIM));
+                        }
+                        None => {
+                            ui.label(RichText::new(format!("{have} is installed")).color(TEXT_DIM));
+                        }
+                    }
+                });
+                if let Some(Err(e)) = &q.fw_release {
+                    ui.horizontal(|ui| {
+                        ui.add_space(20.0);
+                        ui.label(theme::small(e.as_str()));
+                    });
+                }
+                ui.add_space(8.0);
                 if let Some((stage, f)) = &q.fw_busy {
                     super::progress_bar(ui, *f, stage);
                     ui.add_space(2.0);
                     ui.label(RichText::new("Don't unplug the keyboard.").color(super::WARN));
                     return;
                 }
-                let mut keep = !q.fw_discard;
-                if ui.checkbox(&mut keep, "Keep my keymap, macros and lighting (they are saved first and put back after)").changed() {
-                    q.fw_discard = !keep;
+                if let Some(r) = rel.as_ref().filter(|_| newer) {
+                    let resp = ui.add_enabled(connected && !demo, super::primary_button(&format!("Update to {}", r.tag)));
+                    if resp.clicked() {
+                        install = true;
+                    }
+                    let note = if demo {
+                        "Not with the simulated keyboard."
+                    } else if !connected {
+                        "Plug in the keyboard to update it."
+                    } else if q.fw_discard {
+                        "Takes about 20 seconds. Your keymap, macros and lighting go back to the defaults."
+                    } else {
+                        "Takes about 20 seconds. Your keymap, macros and lighting are kept."
+                    };
+                    ui.label(theme::small(note));
+                    ui.add_space(4.0);
                 }
-                ui.horizontal(|ui| {
-                    let rel = q.fw_release.as_ref().and_then(|r| r.as_ref().ok());
-                    if let Some(r) = rel {
-                        let newer = r.version > installed;
-                        let label = if newer { format!("Update to {}", r.tag) } else { format!("Reinstall {}", r.tag) };
-                        let btn = egui::Button::new(RichText::new(label).family(theme::semibold()).color(if newer { Color32::BLACK } else { Color32::WHITE }))
-                            .fill(if newer { ACCENT } else { KEYCAP });
-                        if ui.add_enabled(connected && !demo, btn).clicked() {
-                            install = true;
+                egui::CollapsingHeader::new(RichText::new("More options").color(TEXT_DIM)).id_salt("fw-more").show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("Check again").clicked() {
+                            recheck = true;
                         }
+                        if let Some(r) = rel.as_ref().filter(|_| !newer) {
+                            if ui.add_enabled(connected && !demo, egui::Button::new(format!("Reinstall {}", r.tag))).clicked() {
+                                install = true;
+                            }
+                        }
+                        if ui.add_enabled(connected && !demo, egui::Button::new("Flash a .bin file…")).clicked() {
+                            install_file = true;
+                        }
+                    });
+                    let mut keep = !q.fw_discard;
+                    if ui.checkbox(&mut keep, "Keep my keymap, macros and lighting").changed() {
+                        q.fw_discard = !keep;
                     }
-                    if ui.add_enabled(connected && !demo, egui::Button::new("Flash a file…")).clicked() {
-                        install_file = true;
-                    }
-                    if demo {
-                        ui.label(RichText::new("(not with the simulated keyboard)").color(TEXT_DIM));
-                    }
+                    ui.label(theme::small(format!(
+                        "Releases come from github.com/{}. Updating restarts the keyboard into its bootloader, writes and checks the firmware, then restarts it.",
+                        src.repo
+                    )));
                 });
             });
         }
@@ -581,7 +606,7 @@ impl OpenPeriphApp {
                 ui.label(theme::title("Couldn't read the keyboard").color(BAD));
                 ui.label(RichText::new(e).color(TEXT_DIM));
                 if self.firmware_source(i).is_some() {
-                    ui.label(RichText::new("Its firmware can be updated on the Settings page.").color(TEXT_DIM));
+                    ui.label(RichText::new("Its firmware can be updated on the Device page.").color(TEXT_DIM));
                 }
                 if ui.button("Try again").clicked() {
                     if let Some(q) = self.devices[i].qmk.as_mut() {
@@ -668,12 +693,12 @@ impl OpenPeriphApp {
                 let code = keymap.get(layer).and_then(|l| l.get(k.row as usize)).and_then(|r| r.get(k.col as usize)).copied().unwrap_or(0);
                 let selected = q.key == Some((k.row, k.col));
                 let mut fill = match code {
-                    KC_TRNS => Color32::from_rgb(24, 34, 28),
-                    KC_NO => Color32::from_rgb(20, 28, 23),
+                    KC_TRNS => Color32::from_rgb(31, 35, 44),
+                    KC_NO => Color32::from_rgb(26, 29, 37),
                     _ => KEYCAP,
                 };
                 if layer > 0 && code != KC_TRNS {
-                    fill = Color32::from_rgb(30, 76, 50);
+                    fill = Color32::from_rgb(44, 72, 58);
                 }
                 if resp.hovered() {
                     fill = fill.gamma_multiply(1.25);

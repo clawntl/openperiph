@@ -1,155 +1,71 @@
 # OpenPeriph
 
-A small, modern settings app for PC peripherals, written in Rust with
-[eframe/egui](https://github.com/emilk/egui), for **Windows and Linux**. It talks to devices
-directly: through Windows' own HID functions, or Linux's hidraw devices.
+Settings for your keyboards and mice, without the vendor software. OpenPeriph is a small app for
+**Windows and Linux** that talks to devices directly over USB. You don't need an account, it
+works offline, and nothing has to keep running in the background afterwards.
+
+![The keymap editor](docs/images/keys.png)
+
+## What it does
+
+- **Remap keys** on every layer: other keys, shortcuts, media and mouse keys, layers, macros.
+- **Lighting**: effects, colour (with a proper colour picker), speed and brightness.
+- **Macros** that type text, press shortcuts and wait.
+- **Mouse settings**: DPI stages, polling rate, lift-off distance, debounce, sleep.
+- **Firmware updates** for keyboards that support them, keeping your settings.
+- **Backups** of a keyboard's keymap, macros and lighting.
+- **Updates itself** from GitHub releases.
+
+Plug a device in and it gets a tab along the top and a card on the Home page. Devices that aren't
+plugged in stay out of the way; **About** (the ⓘ button) lists everything that's supported.
+
+| | |
+| --- | --- |
+| ![Home](docs/images/home.png) | ![Lighting with the colour picker](docs/images/colour.png) |
+| ![Mouse settings](docs/images/mouse.png) | ![Firmware and device settings](docs/images/settings.png) |
 
 ## Supported devices
 
-| Device | What you can change |
-|---|---|
-| **Any QMK keyboard with VIA** (found automatically by QMK's raw HID interface) | Keymap on every layer (any QMK keycode: layers, mod-tap, layer-tap, shortcuts, media, mouse, lighting, macros, QMK keys, the keyboard's own keycodes), macros, lighting (the keyboard's VIA menus, or the standard ones for the lighting its firmware has), layout options, backup and restore (VIA-compatible files), reset keymap or macros. Needs the keyboard's VIA definition for the keymap: bundled ones are below, others can be imported |
-| **Cooler Master SK620** with [QMK](https://github.com/clawntl/qmk-sk620) (USB FEED:0620) | All of the above, definition bundled. **Firmware updates**: checks GitHub for a newer release when it's plugged in, and installs it (or a .bin file) in one click, keeping your keymap, macros and lighting |
-| **CIY X78** keyboard (UK ISO, USB 258A:0016) | Remap any key on the normal and Fn layers (other keys, shortcuts, mouse buttons, media keys, off); lighting effect, colour, speed, brightness, direction, game-mode groups |
-| **Attack Shark R5 ULTRA** mouse (USB 373E:0046 cable / 373E:0047 receiver) | DPI stages (up to 6, 100–42 000), stage in use, onboard profile, polling rate (to 8 kHz on the receiver), lift-off distance, motion sync, ripple control, angle snapping, click debounce, sleep timer; shows battery and firmware |
+| Device | What you can change | Details |
+| --- | --- | --- |
+| Any **QMK keyboard with VIA** | Keymap, macros, lighting, layout options, backups | [QMK and VIA keyboards](docs/devices/qmk-via.md) |
+| **Cooler Master SK620** (running [our QMK firmware](https://github.com/clawntl/qmk-sk620)) | Everything above, plus firmware updates | [Cooler Master SK620](docs/devices/cooler-master-sk620.md) |
+| **CIY X78** keyboard (UK ISO) | Keys on the normal and Fn layers, lighting | [CIY X78](docs/devices/ciy-x78.md) |
+| **Attack Shark R5 ULTRA** mouse | DPI, polling, sensor, buttons, power | [Attack Shark R5 ULTRA](docs/devices/attack-shark-r5-ultra.md) |
 
-How each device's messages work, and where every value came from, is written down in
-[MECHANICS.md](MECHANICS.md).
+## Download
 
-Each plugged-in device gets a tab along the top and a card on the Home page. The ⓘ button (top
-right) opens About: the version, updates, the background and this list of supported devices.
+Get the latest version from [Releases](https://github.com/clawntl/openperiph/releases/latest):
 
-QMK keyboards are changed the way VIA changes them: every edit is saved on the keyboard straight
-away, so there's no Apply button for them, and nothing has to stay running afterwards.
+- **Windows:** download `openperiph.exe` and run it. Nothing to install.
+- **Arch Linux and CachyOS:** download the `.pkg.tar.zst` file, then
+  `sudo pacman -Syu && sudo pacman -U openperiph-*-x86_64.pkg.tar.zst`.
+- **Other Linux:** download `openperiph-linux-x64`, make it executable and run it.
 
-## Build and run
+On Linux, devices need a udev rule before you can use them without root. The Arch package
+installs these rules. Otherwise, OpenPeriph shows **Allow access** and adds the rule for you. See
+[Linux](docs/linux.md).
 
-Needs the Rust toolchain (on Windows with the GNU toolchain, also MinGW's `dlltool`/`as` on
-`PATH`).
+## Updates
 
-```
-cargo build --release
-target\release\openperiph.exe      # Windows
-./target/release/openperiph         # Linux
-```
+OpenPeriph checks GitHub when it starts. If there's a newer version, it asks whether to update.
+It downloads the new version, checks its SHA-256, installs it and restarts. The Arch package is
+updated with pacman, and you're asked for your password.
 
-Options: `--demo` adds a simulated QMK keyboard (an SK620) to try the QMK pages without one.
-`--screenshot <file.png> [--page home|keys|lighting|colour|macros|settings|mouse|mouse-device|x78|x78-lighting|about|fw-update|app-update|flashing]` opens the window quietly,
-draws it, saves a picture and exits.
+Keyboards with firmware updates (the SK620) are checked when you plug them in, in the same way.
 
-## Firmware updates (SK620)
+## Look
 
-When the SK620 is connected, OpenPeriph asks GitHub for the newest
-[qmk-sk620 release](https://github.com/clawntl/qmk-sk620/releases) and compares it with the version
-the keyboard reports. If it's newer, a window asks whether to update now, showing the release notes
-(and a **Firmware … available** button stays at the top right). **Update** downloads it, saves your keymap, macros and lighting, restarts the keyboard into
-its bootloader, erases, writes and checks the firmware, restarts it and puts your settings back.
-Keys you never changed take the new firmware's defaults, so fixes to the default keymap come
-through. **Flash a file…** installs a `.bin` you choose instead.
+The app has a neutral dark theme. **About → Appearance** sets what's behind the panels: plain,
+faint smoke, or a picture of your own. A device's **Device** page can show a photo of your own
+device instead of the drawing.
 
-The very first flash over Cooler Master's own firmware still needs the SK620 project's
-`sk620_flash` (the chip is read-protected until it is mass-erased with the SEL2 pads bridged).
-After that, every update works from here.
+## More
 
-## Updating OpenPeriph
+- [Linux](docs/linux.md): installing, udev rules, building the Arch package.
+- [Development](docs/development.md): building, adding a device, releasing.
+- [Protocols](docs/protocols/): how OpenPeriph talks to each device, with sources.
+- [Changelog](CHANGELOG.md).
 
-When it starts, OpenPeriph asks GitHub for its newest release. If there is a newer one, **Update
-OpenPeriph to …** appears at the top right (also on the About page), and a window asks whether to update now. It downloads the release, checks it against the
-SHA-256 GitHub lists for the file, installs it and restarts:
-
-- Arch package: installs the new package with `pacman -U` (through `pkexec`, so it asks for your
-  password).
-- Windows `.exe`, or the Linux program kept in a folder you can write to (such as `~/.local/bin`):
-  replaces the program file.
-- Anywhere else: opens the release page.
-
-## Arch Linux and CachyOS
-
-Install the package from a [release](https://github.com/clawntl/openperiph/releases)
-(`openperiph-<version>-1-x86_64.pkg.tar.zst`), after a full system upgrade:
-
-```
-sudo pacman -Syu
-sudo pacman -U openperiph-*-x86_64.pkg.tar.zst
-```
-
-Or build it from this repository (uses only official packages: `rust`, plus what the package
-depends on):
-
-```
-sudo pacman -Syu
-sudo pacman -S --needed base-devel git rust
-git clone https://github.com/clawntl/openperiph
-cd openperiph/packaging/arch
-makepkg -si
-```
-
-The package installs `openperiph` with a menu entry and udev rules for every supported device
-(including the SK620's bootloader), so nothing needs root while using it. Remove it with
-`sudo pacman -R openperiph`.
-
-## Linux
-
-Other distributions: use the Linux build from a release (any x86-64 distribution with glibc 2.35
-or newer). Linux only lets root open HID devices until a udev rule allows it. When a device needs one,
-OpenPeriph shows **Allow access**: it adds a rule for that device to
-`/etc/udev/rules.d/61-openperiph-local.rules` (asking for your password through `pkexec`). Unplug and
-replug the device afterwards. To do it by hand instead, add a line like this for each device and
-run `sudo udevadm control --reload && sudo udevadm trigger`:
-
-```
-KERNEL=="hidraw*", ATTRS{idVendor}=="feed", ATTRS{idProduct}=="0620", MODE="0660", TAG+="uaccess"
-```
-
-File dialogs (importing definitions, backups) go through the desktop's XDG portal, which KDE,
-GNOME and most desktops provide.
-
-## QMK keyboard definitions
-
-QMK keyboards don't report their physical layout, so the keymap page uses the keyboard's VIA
-definition. Bundled: `definitions/` (the SK620). For another keyboard, get its JSON from
-[the-via/keyboards](https://github.com/the-via/keyboards) (folder `v3`) or its maker and use
-**Import VIA definition** on the keyboard's Keymap or Settings page; a copy is kept in the
-settings folder (`%APPDATA%\OpenPeriph\definitions` or `~/.config/OpenPeriph/definitions`).
-Keyboards whose firmware uses an older VIA protocol than 12 (before QMK 0.20) aren't supported.
-
-To regenerate the QMK keycode table from a QMK checkout:
-`python3 tools/gen_qmk_keycodes.py /path/to/qmk_firmware > src/qmk/keycodes_table.rs`.
-
-## Adding a device
-
-A QMK keyboard with VIA needs no code: add its VIA definition to `definitions/` and to
-`BUNDLED` in `src/qmk/definition.rs`.
-
-Anything else is a driver implementing the `Driver` trait in `src/device.rs`; keyboard and mouse
-parts have empty defaults, so a driver only implements what its hardware has. See
-`src/drivers/ciy_x78` (keyboard) and `src/drivers/attack_shark_r5` (mouse), then add the new
-driver to `src/drivers/mod.rs`.
-
-## Notes
-
-- The CIY X78 protocol was worked out from the vendor's Windows driver; the R5 ULTRA protocol
-  from Attack Shark's web driver and the documented facts in
-  [Shark Deck](https://github.com/alexandrewillame/shark-deck) (no code from either is included).
-- The QMK/VIA support follows QMK's own source (protocol version 12); see MECHANICS.md.
-- Not affiliated with CIY, Attack Shark, Cooler Master, QMK or VIA. Use at your own risk: settings are written to the
-  device's own memory.
-
-## Releases
-
-Every push and pull request is tested and built for Windows, Linux and Arch by GitHub Actions.
-
-To release:
-
-1. Note what changed under **Unreleased** in [CHANGELOG.md](CHANGELOG.md) (it becomes the
-   release notes).
-2. On GitHub, open **Actions → Release → Run workflow**, pick **patch**, **minor** or **major**,
-   and run it.
-
-That raises the version in `Cargo.toml`, commits it to `main`, builds everything and publishes the
-release with `openperiph.exe`, the Linux program, the Arch package, a zip, a tar.gz and
-`SHA256SUMS`. Installed copies of OpenPeriph then offer the update when they start.
-
-You can also do it locally: `python3 tools/bump_version.py patch`, commit and push to `main`. Any
-push to `main` whose version has no release yet publishes it; one that's already released just
-builds.
+OpenPeriph isn't affiliated with QMK, VIA, Cooler Master, CIY or Attack Shark. It writes settings
+to your devices' own memory: use it at your own risk.
