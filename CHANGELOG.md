@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.5.0 (2026-11-27)
+
 - Attack Shark R5 ULTRA: **Hunting Shark competitive mode** on the Performance page (runs the
   sensor at full performance; uses more battery). Hidden if the mouse's firmware doesn't have it.
 
