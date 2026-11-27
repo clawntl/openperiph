@@ -268,14 +268,13 @@ pub fn any_colour_payload(any: &AnyColour) -> Vec<u8> {
     let dim = |v: u8| ((v as u16 * scale + 50) / 100) as u8;
     let [r, g, b] = any.rgb.map(dim);
     let mut out = vec![0u8; GROUP_LEN * 2];
-    // Slots of real keys, plus 57: the original copies a colour given to Space (35), 57 or Up
-    // (100) into the other two (0x40e19e), so give all three the colour.
-    let slots = KEYS.iter().map(|k| k.matrix as usize).chain([35, 57, 100]).filter(|m| *m < KEY_ENTRIES);
-    for m in slots {
-        out[m] = b;
-        out[KEY_ENTRIES + m] = g;
-        out[2 * KEY_ENTRIES + m] = r;
-    }
+    // Every one of the 132 slots, not only the keys' matrix slots: on the keyboard, filling only
+    // those left some LEDs dark, so the planes seem to follow the LEDs' own numbering (the
+    // "light index" of Cfg.ini's [KEY] lines), not the key table's. One colour for everything
+    // doesn't need to know which is which.
+    out[..KEY_ENTRIES].fill(b);
+    out[KEY_ENTRIES..2 * KEY_ENTRIES].fill(g);
+    out[2 * KEY_ENTRIES..3 * KEY_ENTRIES].fill(r);
     out
 }
 
@@ -587,6 +586,8 @@ mod tests {
         assert_eq!((m[35], m[132 + 35], m[264 + 35]), (0x00, 0x7F, 0xFF));
         assert_eq!(m[264 + 57], 0xFF);
         assert_eq!(m[264 + 100], 0xFF);
+        // every slot, even ones with no key in the key table
+        assert!((0..132).all(|k| (m[k], m[132 + k], m[264 + k]) == (0x00, 0x7F, 0xFF)));
         // second half untouched
         assert!(m[396..].iter().all(|b| *b == 0));
         // dimmer: 50 %

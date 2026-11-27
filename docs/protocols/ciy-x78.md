@@ -129,9 +129,14 @@ go up by 4 (0x40e40d):
 | `B0` | M3 | M4 |
 | `B4` | M5 | (zeros) |
 
-One group is three planes of 132 bytes, one byte per key slot (the matrix index, as in the key
-table), **blue first**: bytes 0–131 blue, 132–263 green, 264–395 red (`RGBIndex=2,1,0` in
-Cfg.ini, 0x40e11b–0x40e191). Slots with no key are sent as 0.
+One group is three planes of 132 bytes, one byte per LED slot, **blue first**: bytes 0–131
+blue, 132–263 green, 264–395 red (`RGBIndex=2,1,0` in Cfg.ini, 0x40e11b–0x40e191). The red,
+green and blue order is right (checked on the keyboard, 2026-11-27).
+
+Which slot is which LED: filling only the keys' matrix slots (the key table's numbering) left
+some LEDs dark on the keyboard, so the slots are probably the LEDs' own numbers (the last
+number, "light index", of each `[KEY]` line in Cfg.ini), which this app doesn't have yet.
+OpenPeriph's Any colour fills all 132 slots, which doesn't depend on it.
 
 Then Game mode with that group: profile byte 4 = `01`, byte 5 = `0F`, byte 6 = `20` + group
 (M5 = `24`). The original sends colour groups before the final settings write, 40 ms after each

@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- CIY X78: Any colour now lights every LED (some stayed dark in v0.5.2).
+
 ## v0.5.2 (2026-11-27)
 
 - CIY X78: the Enter key is drawn as the ISO Enter it is (L-shaped, over two rows).
