@@ -30,12 +30,14 @@ impl Pictures {
     }
 
     /// A photo that comes with the app, for devices that have one.
-    pub fn bundled(&mut self, ctx: &egui::Context, id: &str) -> Option<egui::TextureHandle> {
-        let bytes: &'static [u8] = match id {
-            "attack-shark-r5-ultra" => include_bytes!("../../assets/devices/attack-shark-r5-ultra.png"),
+    pub fn bundled(&mut self, ctx: &egui::Context, info: &crate::device::DeviceInfo) -> Option<egui::TextureHandle> {
+        let (name, bytes): (&str, &'static [u8]) = match (info.id.as_str(), info.vendor_id, info.product_id) {
+            ("attack-shark-r5-ultra", _, _) => ("attack-shark-r5-ultra", include_bytes!("../../assets/devices/attack-shark-r5-ultra.png")),
+            ("ciy-x78", _, _) => ("ciy-x78", include_bytes!("../../assets/devices/ciy-x78.png")),
+            (_, 0xFEED, 0x0620) => ("cooler-master-sk620", include_bytes!("../../assets/devices/cooler-master-sk620.png")),
             _ => return None,
         };
-        let key = format!("bundled-{id}");
+        let key = format!("bundled-{name}");
         self.loaded.entry(key.clone()).or_insert_with(|| theme::texture_from_bytes(ctx, &key, bytes)).clone()
     }
 
@@ -443,7 +445,8 @@ impl OpenPeriphApp {
             theme::photo(p, rect, &tex);
             return;
         }
-        if let Some(tex) = self.pictures.bundled(ctx, &id) {
+        let info = self.devices[i].driver.info().clone();
+        if let Some(tex) = self.pictures.bundled(ctx, &info) {
             theme::photo(p, rect, &tex);
             return;
         }

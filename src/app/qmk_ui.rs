@@ -131,7 +131,7 @@ impl QmkState {
 /// The simulated keyboard for `--demo`.
 pub fn demo_driver() -> Arc<dyn Driver> {
     let def = Definition::parse(definition::BUNDLED[0]).ok();
-    let mut d = QmkDriver::new(0xFEED, 0x0620, "demo".into(), "SK620".into(), "QMK".into(), def);
+    let mut d = QmkDriver::new(0xFEED, 0x0620, "demo".into(), "SK620".into(), "Cooler Master".into(), def);
     d.demo = true;
     Arc::new(d)
 }
