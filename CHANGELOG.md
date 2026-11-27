@@ -12,7 +12,7 @@ version, and the section becomes the release notes on GitHub.
 - A tab for each plugged-in device along the top, and a Home page with a card for each one.
 - Each device has its own navigation (Keymap, Lighting, Macros, Performance, Device) with a
   picture of it: drawn from its real key layout (in its current lighting colour for QMK
-  keyboards), or a photo of your own (Device page → Picture).
+  keyboards), a photo of the R5 ULTRA, or a photo of your own (Device page → Picture).
 - Appearance (About page): plain, faint smoke, or a picture of your own behind the panels.
 - Firmware updates: asks whether to update when newer SK620 firmware is out, with the release
   notes. The Device page shows one status line (installed → latest) and one Update button; the

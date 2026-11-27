@@ -29,6 +29,16 @@ impl Pictures {
         self.loaded.entry(name.to_string()).or_insert_with(|| store::picture(name).and_then(|p| theme::load_texture(ctx, &p).ok())).clone()
     }
 
+    /// A photo that comes with the app, for devices that have one.
+    pub fn bundled(&mut self, ctx: &egui::Context, id: &str) -> Option<egui::TextureHandle> {
+        let bytes: &'static [u8] = match id {
+            "attack-shark-r5-ultra" => include_bytes!("../../assets/devices/attack-shark-r5-ultra.png"),
+            _ => return None,
+        };
+        let key = format!("bundled-{id}");
+        self.loaded.entry(key.clone()).or_insert_with(|| theme::texture_from_bytes(ctx, &key, bytes)).clone()
+    }
+
     pub fn forget(&mut self, name: &str) {
         self.loaded.remove(name);
     }
@@ -386,7 +396,7 @@ impl OpenPeriphApp {
         let mut clear = false;
         theme::card(ui, |ui| {
             ui.label(title("Picture"));
-            ui.label(dim("How this device is shown. The drawing is made from its layout; you can use a photo of yours instead."));
+            ui.label(dim("How this device is shown. You can use a photo of your own instead."));
             ui.add_space(8.0);
             ui.horizontal_top(|ui| {
                 let (r, _) = ui.allocate_exact_size(Vec2::new(300.0, 150.0), Sense::hover());
@@ -398,7 +408,7 @@ impl OpenPeriphApp {
                     if ui.button("Use a photo…").clicked() {
                         pick = true;
                     }
-                    if ui.add_enabled(has_photo, egui::Button::new("Use the drawing")).clicked() {
+                    if ui.add_enabled(has_photo, egui::Button::new("Use the default")).clicked() {
                         clear = true;
                     }
                     ui.add_space(4.0);
@@ -426,10 +436,14 @@ impl OpenPeriphApp {
     // -----------------------------------------------------------------------------------------
     // Pictures of the hardware
 
-    /// A photo of the device if you chose one, otherwise a drawing of it.
+    /// A photo of the device if you chose one, otherwise the bundled photo or a drawing of it.
     pub(super) fn device_art(&mut self, ctx: &egui::Context, p: &egui::Painter, i: usize, rect: Rect, legends: bool) {
         let id = self.devices[i].driver.info().id.clone();
         if let Some(tex) = self.pictures.get(ctx, &photo_name(&id)) {
+            theme::photo(p, rect, &tex);
+            return;
+        }
+        if let Some(tex) = self.pictures.bundled(ctx, &id) {
             theme::photo(p, rect, &tex);
             return;
         }

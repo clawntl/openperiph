@@ -72,5 +72,7 @@ Ordinary pushes are only built, never released. To release the version that's al
 
 - [Inter](https://rsms.me/inter/) typeface by Rasmus Andersson, under the SIL Open Font Licence
   (`assets/fonts/Inter-LICENSE.txt`).
+- The Attack Shark R5 ULTRA photo (`assets/devices/`) is Attack Shark's product photo, with the
+  background removed.
 - The QMK/VIA support follows QMK's own source. The device protocols credit their sources in
   `docs/protocols/`.

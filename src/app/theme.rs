@@ -473,6 +473,13 @@ fn load_picture(path: &std::path::Path, max: u32) -> Result<(usize, usize, Vec<[
     Ok((w, h, rgb.pixels().map(|p| [lin(p[0]), lin(p[1]), lin(p[2])]).collect()))
 }
 
+/// A picture from memory (bundled with the app) as a texture.
+pub fn texture_from_bytes(ctx: &egui::Context, name: &str, bytes: &[u8]) -> Option<TextureHandle> {
+    let rgba = image::load_from_memory(bytes).ok()?.to_rgba8();
+    let image = egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
+    Some(ctx.load_texture(name, image, TextureOptions::LINEAR))
+}
+
 /// A picture to show as a texture (for photos of devices).
 pub fn load_texture(ctx: &egui::Context, path: &std::path::Path) -> Result<TextureHandle, String> {
     let img = image::open(path).map_err(|e| format!("Couldn't read {}: {e}", path.display()))?;
