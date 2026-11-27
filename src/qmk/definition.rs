@@ -304,7 +304,7 @@ fn parse_pair(s: &str) -> Option<(usize, usize)> {
 }
 
 /// Definitions shipped with the app.
-pub const BUNDLED: &[&str] = &[include_str!("../../definitions/cm_sk620_iso.json")];
+pub const BUNDLED: &[&str] = &[include_str!("../../definitions/cm_sk620_iso.json"), include_str!("../../definitions/ciy_x78_smk_iso.json")];
 
 /// Bundled plus imported definitions.
 pub fn all_definitions() -> Vec<Definition> {
@@ -334,6 +334,19 @@ mod tests {
         let enter = d.keys.iter().find(|k| (k.row, k.col) == (6, 7)).unwrap();
         assert_eq!((enter.x, enter.y, enter.w, enter.h), (13.75, 1.0, 1.25, 2.0));
         assert_eq!(enter.second, Some([-0.25, 0.0, 1.5, 1.0]));
+
+        // the CIY X78 on SMK: UK ISO TKL, Enter at matrix (3, 13)
+        let d = Definition::parse(BUNDLED[1]).unwrap();
+        assert_eq!((d.vendor_id, d.product_id, d.rows, d.cols, d.keys.len()), (0x258A, 0x0016, 6, 18, 88));
+        let enter = d.keys.iter().find(|k| (k.row, k.col) == (3, 13)).unwrap();
+        assert_eq!((enter.x, enter.w, enter.h), (13.75, 1.25, 2.0));
+        assert_eq!(enter.second, Some([-0.25, 0.0, 1.5, 1.0]));
+        // its own keycodes follow the firmware's enum from QK_KB_0
+        assert_eq!(d.custom_keycodes[0].name, "FX_NEXT");
+        assert_eq!(d.custom_keycodes[13].name, "FX_SET_OFF");
+        // every row ends at the same right edge
+        let right = d.keys.iter().map(|k| k.x + k.w).fold(0.0f32, f32::max);
+        assert_eq!(right, 18.25);
     }
 
     #[test]

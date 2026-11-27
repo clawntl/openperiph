@@ -1,0 +1,340 @@
+{
+  "name": "CIY X78 (SMK)",
+  "vendorId": "0x258A",
+  "productId": "0x0016",
+  "matrix": {
+    "rows": 6,
+    "cols": 18
+  },
+  "customKeycodes": [
+    {
+      "name": "FX_NEXT",
+      "title": "Next lighting effect",
+      "shortName": "FX+"
+    },
+    {
+      "name": "GUI_LOCK",
+      "title": "Windows key lock",
+      "shortName": "Win Lock"
+    },
+    {
+      "name": "BRI_UP",
+      "title": "Brightness up",
+      "shortName": "Bri+"
+    },
+    {
+      "name": "BRI_DN",
+      "title": "Brightness down",
+      "shortName": "Bri-"
+    },
+    {
+      "name": "SPD_UP",
+      "title": "Effect speed up",
+      "shortName": "Spd+"
+    },
+    {
+      "name": "SPD_DN",
+      "title": "Effect speed down",
+      "shortName": "Spd-"
+    },
+    {
+      "name": "CLR_FWD",
+      "title": "Next colour",
+      "shortName": "Clr+"
+    },
+    {
+      "name": "CLR_BAK",
+      "title": "Previous colour",
+      "shortName": "Clr-"
+    },
+    {
+      "name": "FX_RST",
+      "title": "Reset lighting",
+      "shortName": "FX Reset"
+    },
+    {
+      "name": "FX_SET_0",
+      "title": "Effect: radial",
+      "shortName": "Radial"
+    },
+    {
+      "name": "FX_SET_1",
+      "title": "Effect: horizontal wave",
+      "shortName": "H wave"
+    },
+    {
+      "name": "FX_SET_2",
+      "title": "Effect: vertical wave",
+      "shortName": "V wave"
+    },
+    {
+      "name": "FX_SET_3",
+      "title": "Effect: solid colour",
+      "shortName": "Solid"
+    },
+    {
+      "name": "FX_SET_OFF",
+      "title": "Lighting off",
+      "shortName": "FX Off"
+    }
+  ],
+  "menus": [
+    {
+      "label": "Lighting",
+      "content": [
+        {
+          "label": "Backlight",
+          "content": [
+            {
+              "label": "Effect",
+              "type": "dropdown",
+              "options": [
+                [
+                  "Radial",
+                  0
+                ],
+                [
+                  "Horizontal wave",
+                  1
+                ],
+                [
+                  "Vertical wave",
+                  2
+                ],
+                [
+                  "Solid colour",
+                  3
+                ],
+                [
+                  "Off",
+                  4
+                ]
+              ],
+              "content": [
+                "id_smk_x78_effect",
+                0,
+                1
+              ]
+            },
+            {
+              "showIf": "{id_smk_x78_effect} != 4",
+              "label": "Brightness",
+              "type": "range",
+              "options": [
+                0,
+                3
+              ],
+              "content": [
+                "id_smk_x78_brightness",
+                0,
+                2
+              ]
+            },
+            {
+              "showIf": "{id_smk_x78_effect} < 3",
+              "label": "Effect speed",
+              "type": "range",
+              "options": [
+                0,
+                3
+              ],
+              "content": [
+                "id_smk_x78_speed",
+                0,
+                3
+              ]
+            },
+            {
+              "showIf": "{id_smk_x78_effect} != 4",
+              "label": "Colour",
+              "type": "color",
+              "content": [
+                "id_smk_x78_colour",
+                0,
+                4
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "layouts": {
+    "keymap": [
+      [
+        "0,0",
+        {
+          "x": 1
+        },
+        "0,2",
+        "0,3",
+        "0,4",
+        "0,5",
+        {
+          "x": 0.5
+        },
+        "0,7",
+        "0,8",
+        "0,9",
+        "0,10",
+        {
+          "x": 0.5
+        },
+        "0,11",
+        "0,12",
+        "0,13",
+        "0,14",
+        {
+          "x": 0.25
+        },
+        "0,15",
+        "0,16",
+        "0,17"
+      ],
+      [
+        {
+          "y": 0.25
+        },
+        "1,0",
+        "1,1",
+        "1,2",
+        "1,3",
+        "1,4",
+        "1,5",
+        "1,6",
+        "1,7",
+        "1,8",
+        "1,9",
+        "1,10",
+        "1,11",
+        "1,12",
+        {
+          "w": 2
+        },
+        "1,14",
+        {
+          "x": 0.25
+        },
+        "1,15",
+        "1,16",
+        "1,17"
+      ],
+      [
+        {
+          "w": 1.5
+        },
+        "2,0",
+        "2,1",
+        "2,2",
+        "2,3",
+        "2,4",
+        "2,5",
+        "2,6",
+        "2,7",
+        "2,8",
+        "2,9",
+        "2,10",
+        "2,11",
+        "2,12",
+        {
+          "x": 0.25,
+          "w": 1.25,
+          "h": 2,
+          "w2": 1.5,
+          "h2": 1,
+          "x2": -0.25
+        },
+        "3,13",
+        {
+          "x": 0.25
+        },
+        "2,15",
+        "2,16",
+        "2,17"
+      ],
+      [
+        {
+          "w": 1.75
+        },
+        "3,0",
+        "3,1",
+        "3,2",
+        "3,3",
+        "3,4",
+        "3,5",
+        "3,6",
+        "3,7",
+        "3,8",
+        "3,9",
+        "3,10",
+        "3,11",
+        "3,12"
+      ],
+      [
+        {
+          "w": 1.25
+        },
+        "4,0",
+        "4,14",
+        "4,1",
+        "4,2",
+        "4,3",
+        "4,4",
+        "4,5",
+        "4,6",
+        "4,7",
+        "4,8",
+        "4,9",
+        "4,10",
+        {
+          "w": 2.75
+        },
+        "4,13",
+        {
+          "x": 1.25
+        },
+        "4,16"
+      ],
+      [
+        {
+          "w": 1.25
+        },
+        "5,0",
+        {
+          "w": 1.25
+        },
+        "5,1",
+        {
+          "w": 1.25
+        },
+        "5,2",
+        {
+          "w": 6.25
+        },
+        "5,5",
+        {
+          "w": 1.25
+        },
+        "5,8",
+        {
+          "w": 1.25
+        },
+        "5,9",
+        {
+          "w": 1.25
+        },
+        "5,10",
+        {
+          "w": 1.25
+        },
+        "5,12",
+        {
+          "x": 0.25
+        },
+        "5,15",
+        "5,16",
+        "5,17"
+      ]
+    ]
+  }
+}

@@ -29,7 +29,7 @@ impl Pictures {
     pub fn bundled(&mut self, ctx: &egui::Context, info: &crate::device::DeviceInfo) -> Option<egui::TextureHandle> {
         let (name, bytes): (&str, &'static [u8]) = match (info.id.as_str(), info.vendor_id, info.product_id) {
             ("attack-shark-r5-ultra", _, _) => ("attack-shark-r5-ultra", include_bytes!("../../assets/devices/attack-shark-r5-ultra.png")),
-            ("ciy-x78", _, _) => ("ciy-x78", include_bytes!("../../assets/devices/ciy-x78.png")),
+            ("ciy-x78", _, _) | (_, 0x258A, 0x0016) => ("ciy-x78", include_bytes!("../../assets/devices/ciy-x78.png")),
             (_, 0xFEED, 0x0620) => ("cooler-master-sk620", include_bytes!("../../assets/devices/cooler-master-sk620.png")),
             _ => return None,
         };

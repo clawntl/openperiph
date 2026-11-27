@@ -18,6 +18,18 @@ The CIY X78 is a UK ISO keyboard (USB 258A:0016). It runs its own firmware, not 
 Changes are made in the app first. **Apply to device** then sends them. OpenPeriph keeps its own
 copy of your key settings, because the keyboard can't report its key table back.
 
+## With SMK firmware
+
+[smk-ciy-x78](https://github.com/clawntl/smk-ciy-x78) is open firmware for this keyboard, built on
+SMK. From its version 0.2.0 it speaks VIA, and OpenPeriph shows the keyboard as
+**CIY X78 (SMK)**, with the QMK pages: the keymap on four layers (the keyboard keeps it, and it
+can be read back), and lighting (effect, brightness, speed and a colour for the solid effect).
+The definition is bundled (`definitions/ciy_x78_smk_iso.json`).
+
+SMK has no free USB endpoint for QMK's usual raw HID interface, so it carries VIA's messages as
+feature report 8 on its second interface. OpenPeriph uses that automatically for any VIA
+interface with a 33-byte feature report and no output report.
+
 ## Notes
 
 The protocol was worked out from the vendor's Windows driver. No vendor code is included. Every

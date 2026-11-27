@@ -5,6 +5,12 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- CIY X78 running [SMK](https://github.com/clawntl/smk-ciy-x78) firmware (0.2.0 or newer): shown
+  as **CIY X78 (SMK)** with the keymap (four layers) and lighting pages, through VIA. Its
+  definition is bundled. VIA messages can now go over a feature report, for firmware like SMK
+  that has no endpoint for QMK's raw HID interface.
+- CIY X78: the keyboard running SMK is no longer also listed as the CIY firmware one.
+
 ## v0.5.3 (2026-11-27)
 
 - CIY X78: Any colour now lights every LED (some stayed dark in v0.5.2).

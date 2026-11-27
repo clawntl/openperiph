@@ -13,6 +13,11 @@ pub const USAGE_PAGE: u16 = 0xFF60;
 pub const USAGE: u16 = 0x61;
 pub const MSG_LEN: usize = 32;
 
+/// SMK (firmware for Sinowealth keyboards such as the CIY X78) has no spare endpoint for a raw
+/// HID interface, so it carries each VIA message as feature report 8 on a shared interface: the
+/// message goes out with SET_REPORT and the answer comes back with GET_REPORT.
+pub const SMK_REPORT_ID: u8 = 8;
+
 pub const CMD_PROTOCOL_VERSION: u8 = 0x01;
 pub const CMD_GET_KEYBOARD_VALUE: u8 = 0x02;
 pub const CMD_SET_KEYBOARD_VALUE: u8 = 0x03;
@@ -57,6 +62,14 @@ pub struct HidTransport {
     dev: hid::Handle,
     out_len: usize,
     in_len: usize,
+    /// Messages go as feature reports with this ID (SMK) rather than output and input reports.
+    feature_id: Option<u8>,
+}
+
+/// Whether a VIA collection takes its messages as feature reports: it has no output report to
+/// write to, only a feature report big enough for a message.
+pub fn uses_feature_reports(c: &hid::Collection) -> bool {
+    c.output_len == 0 && c.feature_len as usize >= MSG_LEN + 1
 }
 
 impl HidTransport {
@@ -65,9 +78,34 @@ impl HidTransport {
         // Report lengths include the report ID byte; QMK's are 32 + 1.
         let out_len = (c.output_len as usize).max(MSG_LEN + 1);
         let in_len = (c.input_len as usize).max(MSG_LEN + 1);
-        let mut t = HidTransport { dev, out_len, in_len };
-        t.drain();
+        let feature_id = uses_feature_reports(c).then_some(SMK_REPORT_ID);
+        let mut t = HidTransport { dev, out_len, in_len, feature_id };
+        if t.feature_id.is_none() {
+            t.drain();
+        }
         Ok(t)
+    }
+
+    /// One message as a feature report: written, then read back once the keyboard has answered.
+    fn exchange_feature(&mut self, id: u8, msg: &[u8; MSG_LEN]) -> Result<[u8; MSG_LEN], String> {
+        let mut out = [0u8; MSG_LEN + 1];
+        out[0] = id;
+        out[1..].copy_from_slice(msg);
+        if !self.dev.set_feature(&out) {
+            return Err("The keyboard didn't accept a message (was it unplugged?).".into());
+        }
+        let mut buf = [0u8; MSG_LEN + 1];
+        buf[0] = id;
+        if !self.dev.get_feature(&mut buf) {
+            return Err("The keyboard didn't answer.".into());
+        }
+        let mut r = [0u8; MSG_LEN];
+        r.copy_from_slice(&buf[1..]);
+        if r[0] == msg[0] || r[0] == UNHANDLED {
+            Ok(r)
+        } else {
+            Err("The keyboard sent unexpected answers.".into())
+        }
     }
 
     /// Throws away answers left over from an earlier session.
@@ -79,6 +117,9 @@ impl HidTransport {
 
 impl Transport for HidTransport {
     fn exchange(&mut self, msg: &[u8; MSG_LEN]) -> Result<[u8; MSG_LEN], String> {
+        if let Some(id) = self.feature_id {
+            return self.exchange_feature(id, msg);
+        }
         let mut out = vec![0u8; self.out_len];
         out[1..1 + MSG_LEN].copy_from_slice(msg);
         if !self.dev.write(&out, 500) {

@@ -659,6 +659,20 @@ mod tests {
         assert_eq!(cols, vec![DescCollection { usage_page: 0xFF60, usage: 0x61, input_len: 33, output_len: 33, feature_len: 0 }]);
     }
 
+    /// SMK's second interface on the CIY X78: system, consumer, ISP, VIA (feature report 8,
+    /// 32 bytes) and NKRO collections, as the firmware builds it.
+    #[test]
+    fn parses_smk_descriptor_with_via_feature_report() {
+        let hex = "05010980a1018501198129831500250175019503810295058101c0050c0901a101850219002a3c021500263c02751095018100c00600ff0901a101850519012902150026ff0075089505b102c00660ff0961a10185080962150026ff0075089520b102c005010906a1018506050719e029e71500250175019508810205071900299f15002501750195a08102c0";
+        let d: Vec<u8> = (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
+        let (cols, numbered) = parse_descriptor(&d);
+        assert!(numbered);
+        let via = cols.iter().find(|c| c.usage_page == 0xFF60).unwrap();
+        assert_eq!((via.usage, via.input_len, via.output_len, via.feature_len), (0x61, 0, 0, 33));
+        let isp = cols.iter().find(|c| c.usage_page == 0xFF00).unwrap();
+        assert_eq!(isp.feature_len, 6);
+    }
+
     /// Two top-level collections in one interface with report IDs (keyboard + consumer control).
     #[test]
     fn parses_shared_descriptor_with_report_ids() {

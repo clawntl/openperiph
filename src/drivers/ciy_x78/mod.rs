@@ -413,7 +413,9 @@ impl Driver for CiyX78 {
     }
 
     fn detect(&self) -> bool {
-        hid::collections(VID, PID).iter().any(|c| c.usage_page == USAGE_PAGE)
+        // CIY's own firmware, by its settings channel: SMK on the same keyboard keeps the IDs
+        // and a 6-byte vendor report like CIY's command channel, but has no settings channel.
+        hid::collections(VID, PID).iter().any(|c| c.usage_page == USAGE_PAGE && c.usage == USAGE && c.feature_len as usize == DATA_LEN)
     }
 
     fn read_lighting(&self) -> Result<LightingState, String> {
