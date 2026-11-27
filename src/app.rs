@@ -183,7 +183,7 @@ impl OpenPeriphApp {
             "mouse" | "mouse-device" => {
                 (devices.iter().position(|d| d.driver.capabilities().mouse).unwrap_or(0), if page == "mouse" { Tab::Mouse } else { Tab::Settings })
             }
-            "x78" | "x78-lighting" => (
+            "x78" | "x78-lighting" | "x78-any" => (
                 devices.iter().position(|d| d.driver.capabilities().key_remap && !d.driver.capabilities().qmk).unwrap_or(0),
                 if page == "x78" { Tab::Keys } else { Tab::Lighting },
             ),
@@ -197,7 +197,7 @@ impl OpenPeriphApp {
             "home" | "" => View::Home,
             _ => View::Device,
         };
-        let force_connected = matches!(page.as_str(), "mouse" | "mouse-device" | "x78" | "x78-lighting").then_some(selected);
+        let force_connected = matches!(page.as_str(), "mouse" | "mouse-device" | "x78" | "x78-lighting" | "x78-any").then_some(selected);
         OpenPeriphApp {
             devices,
             selected,
@@ -232,6 +232,12 @@ impl OpenPeriphApp {
     }
 
     fn with_background(mut self, ctx: &egui::Context) -> Self {
+        if self.page == "x78-any" {
+            let d = &mut self.devices[self.selected];
+            if let Some(i) = d.driver.effects().iter().position(|e| e.any_colour) {
+                d.lighting.effect = i;
+            }
+        }
         self.apply_background(ctx);
         self
     }
@@ -314,8 +320,18 @@ impl OpenPeriphApp {
                     }
                 }
                 Msg::Lighting(i, r) => match r {
-                    Ok(l) => {
+                    Ok(mut l) => {
                         let d = &mut self.devices[i];
+                        // The keyboard can't report an app-made colour: keep ours, and show
+                        // "Any colour" again if that's what the keyboard is still set to.
+                        l.any = d.lighting.any;
+                        let effects = d.driver.effects();
+                        if let Some(any) = effects.iter().position(|e| e.any_colour) {
+                            let shows_group = effects.get(l.effect).is_some_and(|e| e.groups > 0);
+                            if d.lighting.effect == any && shows_group && l.group == 4 {
+                                l.effect = any;
+                            }
+                        }
                         if !d.lighting_dirty {
                             d.lighting = l;
                         }
@@ -885,6 +901,28 @@ impl OpenPeriphApp {
             if info.off {
                 ui.label(RichText::new("The lights will be switched off.").color(TEXT_DIM));
             }
+            if info.any_colour {
+                let a = &mut d.lighting.any;
+                let [r, g, b] = a.rgb;
+                let (h, s) = qmk_ui::parse_hex(&format!("{r:02x}{g:02x}{b:02x}")).unwrap_or((0, 0));
+                ui.label(RichText::new("Colour").color(TEXT_DIM));
+                if let Some((h, s)) = qmk_ui::colour_picker(ui, egui::Id::unique("x78-any-colour"), h, s) {
+                    let c = qmk_ui::hsv_colour(h, s);
+                    a.rgb = [c.r(), c.g(), c.b()];
+                    changed = true;
+                }
+                ui.add_space(8.0);
+                let labels = driver.brightness_labels();
+                ui.label(RichText::new("Brightness").color(TEXT_DIM));
+                ui.horizontal(|ui| {
+                    changed |= ui.add(egui::Slider::new(&mut a.brightness, 1..=driver.max_brightness()).show_value(false)).changed();
+                    ui.label(labels.get(a.brightness as usize - 1).cloned().unwrap_or_default());
+                });
+                ui.add_space(6.0);
+                ui.label(theme::small(
+                    "The whole keyboard in one colour. It's kept in colour group M5 on the keyboard (Fn+5 switches back to it); groups M1–M4 aren't changed.",
+                ));
+            }
             if info.groups > 0 {
                 ui.label(RichText::new("Uses the colour groups stored on the keyboard.").color(TEXT_DIM));
                 ui.horizontal(|ui| {
@@ -1385,13 +1423,17 @@ fn preview(ui: &mut Ui, l: &LightingState, info: &crate::device::EffectInfo, dri
     let p = ui.painter();
     p.rect_filled(rect, CornerRadius::same(10), Color32::from_rgb(14, 16, 21));
     let s = l.per_effect.get(l.effect).copied();
-    let bright = s.map(|s| s.brightness as f32 / driver.max_brightness() as f32).unwrap_or(1.0);
+    let level = if info.any_colour { Some(l.any.brightness) } else { s.map(|s| s.brightness) };
+    let bright = level.map(|b| b as f32 / driver.max_brightness() as f32).unwrap_or(1.0);
     let t = ui.input(|i| i.time) as f32;
     for k in &layout.keys {
         let r = Rect::from_min_max(rect.min + Vec2::new(k.rect[0], k.rect[1]) * scale, rect.min + Vec2::new(k.rect[2], k.rect[3]) * scale).shrink(0.8);
         let x = k.rect[0] / layout.width;
         let colour = if info.off {
             Color32::from_rgb(40, 42, 48)
+        } else if info.any_colour {
+            let [r, g, b] = l.any.rgb;
+            Color32::from_rgb(r, g, b)
         } else if info.groups > 0 {
             hue(0.55 + 0.1 * l.group as f32 + x * 0.1)
         } else if info.colour && s.and_then(|s| s.colour).is_some() {

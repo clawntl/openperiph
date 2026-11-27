@@ -37,7 +37,7 @@ Data channel (report id 6, always 1032 bytes = id + 7-byte header + payload):
 | Settings reply (GetFeature) | `83 ...` (byte 1 must be 0x83) | 136 settings bytes at payload offset 7 | 0x43f794 / 0x43f79d |
 | Write settings ("SetProfile") | `03 00 00 00 00 00 00` | 136 settings bytes | 0x43f5b0 |
 | Write key table ("Matrix") | `04 C8 00 40 00 00 00` | 1024 bytes | 0x43f890, called 0x40e6ab |
-| Write per-key colours ("SetLedMatrix") | `09 addr 00 40 00 00 00` | 792 bytes | 0x43f7e0 (not used by this app) |
+| Write colour groups ("SetLedMatrix") | `09 addr 00 40 00 00 00` | 792 bytes (two groups) | 0x43f7e0; this app writes group M5 only (see "Colour groups") |
 | Write macro block ("SetMacroData") | `05 addr 00 40 00 00 00` | 1024 bytes | 0x43fa90 (not used by this app) |
 
 Apply order in the original ("ApplySetting", 0x40dc10): unlock, wait 20 ms; read settings,
@@ -112,6 +112,41 @@ each button's number (`+0x88`) is its colour index. This matches "Always on" def
 
 Direction when reading back from the keyboard: the original never decodes the keyboard's bytes
 (it keeps its own profile file); this app reads them with the exact reverse of `FUN_0040dac0`.
+
+## Colour groups (Game mode M1–M5): any colour
+
+The effects only take the 7 basic colours. **Game mode** instead shows one of five stored colour
+groups, in which every key has its own full RGB colour. This is how the original sets colours
+such as orange; OpenPeriph's **Any colour** fills group M5 with one colour and selects it.
+
+Message (data channel): `06 09 addr 00 40 00 00 00` + 792 bytes + zeros to 1032. Each message
+carries two groups of 396 bytes. Addresses start at `GaoshouAddr` = 0xAC (read at 0x43b3f6) and
+go up by 4 (0x40e40d):
+
+| Address | First 396 bytes | Second 396 bytes |
+|---|---|---|
+| `AC` | M1 | M2 |
+| `B0` | M3 | M4 |
+| `B4` | M5 | (zeros) |
+
+One group is three planes of 132 bytes, one byte per key slot (the matrix index, as in the key
+table), **blue first**: bytes 0–131 blue, 132–263 green, 264–395 red (`RGBIndex=2,1,0` in
+Cfg.ini, 0x40e11b–0x40e191). Slots with no key are sent as 0.
+
+Then Game mode with that group: profile byte 4 = `01`, byte 5 = `0F`, byte 6 = `20` + group
+(M5 = `24`). The original sends colour groups before the final settings write, 40 ms after each
+(0x40e410), and only when Game mode is in use (0x40dfab). It never reads them back.
+
+Notes:
+
+- OpenPeriph only uses M5, whose message has no second group, so groups M1–M4 (which the keyboard
+  can't report back) are never overwritten.
+- Game mode has no brightness setting: OpenPeriph scales the RGB values by the brightness level
+  (5, 25, 50, 75, 100 %).
+- When a flag at 0x5cf034 is set, the original copies a colour given to slot 35 (Space), 57 or
+  100 (Up) into the other two; OpenPeriph gives all three the colour.
+- Fn + 1…5 switches between M1…M5 on the keyboard (`[FN]` codes `0x0b000020…24`).
+- **Not yet tried on a keyboard.**
 
 ## Key table (1024 bytes = 256 entries × 4 bytes)
 

@@ -1499,7 +1499,7 @@ fn control(ui: &mut Ui, c: &Control, cur: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// A hue × saturation area, a hex box and some presets. Brightness has its own slider.
-fn colour_picker(ui: &mut Ui, id: egui::Id, h: u8, s: u8) -> Option<(u8, u8)> {
+pub(super) fn colour_picker(ui: &mut Ui, id: egui::Id, h: u8, s: u8) -> Option<(u8, u8)> {
     let mut out = None;
     ui.horizontal(|ui| {
         // the area: hue left to right, saturation top (full) to bottom (white)
@@ -1591,7 +1591,7 @@ fn colour_picker(ui: &mut Ui, id: egui::Id, h: u8, s: u8) -> Option<(u8, u8)> {
 }
 
 /// `#RRGGBB` (or `RGB`) as QMK hue and saturation; the brightness part is dropped.
-fn parse_hex(text: &str) -> Option<(u8, u8)> {
+pub(super) fn parse_hex(text: &str) -> Option<(u8, u8)> {
     let t = text.trim().trim_start_matches('#');
     let t: String = match t.len() {
         3 => t.chars().flat_map(|c| [c, c]).collect(),

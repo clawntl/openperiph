@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- CIY X78: **Any colour** on the Lighting page: the whole keyboard in any colour (colour picker,
+  hex box, presets, brightness). Stored in the keyboard's colour group M5; M1–M4 aren't touched.
 - Attack Shark R5 ULTRA: with only the receiver plugged in, the mouse is shown only while it's
   switched on and awake (OpenPeriph asks it for its battery level to check).
 

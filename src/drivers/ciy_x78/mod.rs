@@ -23,6 +23,14 @@ const UNLOCK: [u8; 9] = [0x05, 0x01, 0xAA, 0xBB, 0x2F, 0x3E, 0x00, 0x00, 0x00];
 const READ_SETTINGS: [u8; 7] = [0x05, 0x83, 0x00, 0x00, 0x00, 0x00, 0x00];
 const HDR_WRITE_SETTINGS: [u8; 7] = [0x03, 0, 0, 0, 0, 0, 0];
 const HDR_WRITE_KEYS: [u8; 7] = [0x04, 0xC8, 0x00, 0x40, 0x00, 0x00, 0x00];
+/// Colour groups ("SetLedMatrix", 0x43f7e0): `09 address 00 40 00 00 00`, two groups per message.
+/// Addresses from `GaoshouAddr` = 0xAC, +4 per message: AC = M1+M2, B0 = M3+M4, B4 = M5 + nothing.
+/// "Any colour" uses M5, the only group that has a message to itself, so M1–M4 are never touched.
+const HDR_WRITE_GROUP_M5: [u8; 7] = [0x09, 0xB4, 0x00, 0x40, 0x00, 0x00, 0x00];
+const GROUP_LEN: usize = 396; // three planes of 132 key slots: blue, green, red (RGBIndex=2,1,0)
+const ANY_COLOUR_GROUP: u8 = 4; // M5
+/// Brightness levels as a share of full colour (Cfg.ini BriScale=5,25,50,75,100).
+const BRI_SCALE: [u16; 5] = [5, 25, 50, 75, 100];
 const SETTINGS_LEN: usize = 136;
 const GLOBAL_LEN: usize = 8;
 const PROFILE_LEN: usize = 64;
@@ -37,6 +45,8 @@ const COLOURFUL: u8 = 7;
 const DIRECTION_BIT: u8 = 8;
 const EFFECT_GAME: usize = 14;
 const EFFECT_OFF: usize = 15;
+/// Not a keyboard effect: Game mode showing group M5, filled with one colour by this app.
+const EFFECT_ANY: usize = 16;
 const EFFECT_RAINBOW_WHEEL: usize = 9; // effect code 10, reversed direction (Direct1=10,8,0)
 const LEVELS: u8 = 5;
 
@@ -77,11 +87,11 @@ impl CiyX78 {
 /// `LedOptN = icon, speed, brightness, direction, colourful, colour` (Cfg.ini); which control
 /// each value shows is in function 0x417c50. Brightness is 1 for every effect listed.
 const fn fx(name: &'static str, speed: bool, colour: bool, direction: bool) -> EffectInfo {
-    EffectInfo { name, speed, brightness: true, direction, colour, colourful: colour, groups: 0, off: false }
+    EffectInfo { name, speed, brightness: true, direction, colour, colourful: colour, groups: 0, off: false, any_colour: false }
 }
 
 /// Effects in the keyboard's own order (effect code = position + 1, `EffectHw` default at 0x43bb13).
-const EFFECTS: [EffectInfo; 16] = [
+const EFFECTS: [EffectInfo; 17] = [
     fx("Colour loop", true, false, false),
     fx("Breathing", true, true, false),
     fx("Always on", false, true, false),
@@ -96,8 +106,9 @@ const EFFECTS: [EffectInfo; 16] = [
     fx("Stars", true, true, false),
     fx("Shadow", true, true, false),
     fx("Snake", true, true, false),
-    EffectInfo { name: "Game mode", speed: false, brightness: false, direction: false, colour: false, colourful: false, groups: 5, off: false },
-    EffectInfo { name: "Off", speed: false, brightness: false, direction: false, colour: false, colourful: false, groups: 0, off: true },
+    EffectInfo { name: "Game mode", speed: false, brightness: false, direction: false, colour: false, colourful: false, groups: 5, off: false, any_colour: false },
+    EffectInfo { name: "Off", speed: false, brightness: false, direction: false, colour: false, colourful: false, groups: 0, off: true, any_colour: false },
+    EffectInfo { name: "Any colour", speed: false, brightness: true, direction: false, colour: false, colourful: false, groups: 0, off: false, any_colour: true },
 ];
 
 /// Basic colours 0..6, from the colour-button table built in function 0x4168e0
@@ -225,9 +236,14 @@ pub fn decode_lighting(settings: &[u8; SETTINGS_LEN]) -> LightingState {
 /// Writes the lighting choices into profile 1 of a settings block, keeping every other byte.
 pub fn encode_lighting(settings: &mut [u8; SETTINGS_LEN], state: &LightingState) {
     let p = &mut settings[GLOBAL_LEN..GLOBAL_LEN + PROFILE_LEN];
-    p[P_GAME_FLAG] = u8::from(state.effect == EFFECT_GAME);
-    p[P_EFFECT] = if state.effect == EFFECT_OFF { 0 } else { state.effect as u8 + 1 };
-    p[P_GROUP] = GROUP_BASE + state.group.min(4);
+    let any = state.effect == EFFECT_ANY;
+    p[P_GAME_FLAG] = u8::from(state.effect == EFFECT_GAME || any);
+    p[P_EFFECT] = match state.effect {
+        EFFECT_OFF => 0,
+        EFFECT_ANY => EFFECT_GAME as u8 + 1,
+        e => e as u8 + 1,
+    };
+    p[P_GROUP] = GROUP_BASE + if any { ANY_COLOUR_GROUP } else { state.group.min(4) };
     for (i, s) in state.per_effect.iter().enumerate().take(14) {
         let dir_set = if i == EFFECT_RAINBOW_WHEEL { s.direction == 0 } else { s.direction == 1 };
         let colour = s.colour.map(|c| c.min(6)).unwrap_or(COLOURFUL);
@@ -240,11 +256,29 @@ pub fn encode_lighting(settings: &mut [u8; SETTINGS_LEN], state: &LightingState)
     p[63] = 0xA5;
 }
 
+/// Colour group M5's message payload: every key the same colour, dimmed to the brightness level.
+/// Then M5's 396 bytes, then 396 zero bytes (the message's second half has no group).
+pub fn any_colour_payload(any: &AnyColour) -> Vec<u8> {
+    let scale = BRI_SCALE[(any.brightness.clamp(1, LEVELS) - 1) as usize];
+    let dim = |v: u8| ((v as u16 * scale + 50) / 100) as u8;
+    let [r, g, b] = any.rgb.map(dim);
+    let mut out = vec![0u8; GROUP_LEN * 2];
+    // Slots of real keys, plus 57: the original copies a colour given to Space (35), 57 or Up
+    // (100) into the other two (0x40e19e), so give all three the colour.
+    let slots = KEYS.iter().map(|k| k.matrix as usize).chain([35, 57, 100]).filter(|m| *m < KEY_ENTRIES);
+    for m in slots {
+        out[m] = b;
+        out[KEY_ENTRIES + m] = g;
+        out[2 * KEY_ENTRIES + m] = r;
+    }
+    out
+}
+
 fn default_lighting() -> LightingState {
     // LEDParam: colourful, speed 5, brightness 5; "Always on" defaults to colour 6.
     let mut per_effect = vec![EffectSettings { colour: None, speed: 5, brightness: 5, direction: 0 }; 16];
     per_effect[2].colour = Some(6);
-    LightingState { effect: 13, per_effect, group: 0 }
+    LightingState { effect: 13, per_effect, group: 0, any: AnyColour::default() }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -407,6 +441,12 @@ impl Driver for CiyX78 {
             settings = Some(s);
         }
 
+        if let Some(l) = lighting.filter(|l| l.effect == EFFECT_ANY) {
+            progress("Sending the colour…");
+            link.write(&HDR_WRITE_GROUP_M5, &any_colour_payload(&l.any))?;
+            sleep(Duration::from_millis(40));
+        }
+
         if let Some(k) = keys {
             progress("Sending key assignments…");
             link.write(&HDR_WRITE_KEYS, &build_key_table(k))?;
@@ -523,6 +563,35 @@ mod tests {
         if let Some(p) = l.per_effect.get(l.effect) {
             println!("settings: {p:?}");
         }
+    }
+
+    #[test]
+    fn any_colour() {
+        let mut s = [0u8; SETTINGS_LEN];
+        let mut l = default_lighting();
+        l.effect = EFFECT_ANY;
+        l.any = AnyColour { rgb: [255, 127, 0], brightness: 5 };
+        encode_lighting(&mut s, &l);
+        let p = &s[GLOBAL_LEN..];
+        assert_eq!((p[P_GAME_FLAG], p[P_EFFECT], p[P_GROUP]), (1, 0x0F, 0x24));
+        let m = any_colour_payload(&l.any);
+        assert_eq!(m.len(), 792);
+        // Esc (slot 0): blue, green, red planes
+        assert_eq!((m[0], m[132], m[264]), (0x00, 0x7F, 0xFF));
+        // Space (35) and Up (100), and 57
+        assert_eq!((m[35], m[132 + 35], m[264 + 35]), (0x00, 0x7F, 0xFF));
+        assert_eq!(m[264 + 57], 0xFF);
+        assert_eq!(m[264 + 100], 0xFF);
+        // second half untouched
+        assert!(m[396..].iter().all(|b| *b == 0));
+        // dimmer: 50 %
+        let half = any_colour_payload(&AnyColour { rgb: [255, 127, 0], brightness: 3 });
+        assert_eq!((half[0], half[132], half[264]), (0, 64, 128));
+        let r = data_report(&HDR_WRITE_GROUP_M5, &m);
+        assert_eq!(&r[..8], &[0x06, 0x09, 0xB4, 0x00, 0x40, 0x00, 0x00, 0x00]);
+        // reading it back gives Game mode, group M5
+        let back = decode_lighting(&s);
+        assert_eq!((back.effect, back.group), (EFFECT_GAME, ANY_COLOUR_GROUP));
     }
 
     #[test]

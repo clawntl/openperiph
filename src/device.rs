@@ -137,6 +137,8 @@ pub struct EffectInfo {
     pub groups: u8,
     /// Turns the lights off.
     pub off: bool,
+    /// Shows one colour picked freely (RGB), not one of the basic colours.
+    pub any_colour: bool,
 }
 
 /// Settings of one effect. Levels run from 1 to the driver's maximum.
@@ -156,6 +158,23 @@ pub struct LightingState {
     pub per_effect: Vec<EffectSettings>,
     /// Colour group for effects with groups.
     pub group: u8,
+    /// The colour for "Any colour" effects, and its brightness level.
+    #[serde(default)]
+    pub any: AnyColour,
+}
+
+/// A freely chosen colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnyColour {
+    pub rgb: [u8; 3],
+    /// 1 to the driver's maximum brightness level.
+    pub brightness: u8,
+}
+
+impl Default for AnyColour {
+    fn default() -> Self {
+        AnyColour { rgb: [255, 127, 0], brightness: 5 }
+    }
 }
 
 /// Remapped keys by key id; keys not listed keep their default.
@@ -232,7 +251,7 @@ pub trait Driver: Send + Sync {
         Vec::new()
     }
     fn default_lighting(&self) -> LightingState {
-        LightingState { effect: 0, per_effect: Vec::new(), group: 0 }
+        LightingState { effect: 0, per_effect: Vec::new(), group: 0, any: AnyColour::default() }
     }
     /// What a key does out of the box on the given layer, in words.
     fn default_description(&self, _key_id: u8, _fn_layer: bool) -> String {
