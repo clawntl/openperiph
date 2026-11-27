@@ -5,6 +5,9 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+- Attack Shark R5 ULTRA: with only the receiver plugged in, the mouse is shown only while it's
+  switched on and awake (OpenPeriph asks it for its battery level to check).
+
 ## v0.5.1 (2026-11-27)
 
 - Windows installer (`openperiph-setup-x64.exe`): installs for your user, with a Start menu entry

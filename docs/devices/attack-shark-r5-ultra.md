@@ -1,7 +1,13 @@
 # Attack Shark R5 ULTRA
 
 A wireless mouse. OpenPeriph works with it over the cable (USB 373E:0046) or the receiver
-(373E:0047).
+(373E:0047). If both are plugged in, it uses the cable.
+
+With only the receiver plugged in, OpenPeriph asks the mouse for its battery level every few
+seconds to see whether it's there. When the mouse is switched off, asleep or out of range, only
+the receiver answers, and the mouse disappears from the top bar and the Home page. Move the mouse
+or switch it on, and it comes back within a few seconds. If its page is open when it goes to
+sleep, the page stays open and says it's off or asleep.
 
 ![The mouse settings](../images/mouse.png)
 

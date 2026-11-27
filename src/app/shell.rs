@@ -231,6 +231,9 @@ impl OpenPeriphApp {
                 return ("Firmware update available", ACCENT);
             }
         }
+        if d.receiver_only {
+            return ("Off or asleep: move it to wake it", WARN);
+        }
         if d.dirty() {
             return ("Changes not sent yet", WARN);
         }
@@ -396,10 +399,12 @@ impl OpenPeriphApp {
         let connected = d.connected == Some(true);
         let st = d.mouse_status.clone();
         let mouse = d.driver.capabilities().mouse;
+        let receiver_only = d.receiver_only;
         let mut tiles: Vec<(&str, String)> = vec![("USB id", format!("{:04X}:{:04X}", info.vendor_id, info.product_id))];
         tiles.push((
             "Connection",
             match (connected, mouse, st.wired) {
+                (false, _, _) if receiver_only => "Receiver only (mouse off)".into(),
                 (false, _, _) => "Not plugged in".into(),
                 (true, true, true) => "Cable".into(),
                 (true, true, false) => "Receiver".into(),
@@ -534,6 +539,7 @@ impl OpenPeriphApp {
                         ui.label(dim(format!("{:04X}:{:04X}", info.vendor_id, info.product_id)));
                         let (t, c) = match d.connected {
                             Some(true) => ("Connected", GOOD),
+                            Some(false) if d.receiver_only => ("Receiver only: mouse off or asleep", WARN),
                             Some(false) => ("Not plugged in", TEXT_MUT),
                             None => ("Looking…", TEXT_MUT),
                         };

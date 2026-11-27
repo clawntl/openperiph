@@ -241,6 +241,26 @@ impl Driver for AttackSharkR5 {
         [PID_CABLE, PID_RECEIVER].iter().any(|pid| hid::collections(VID, *pid).iter().any(|c| c.usage_page == USAGE_PAGE && c.usage == USAGE))
     }
 
+    /// On the cable the mouse is there. With only the receiver plugged in, the mouse may be off:
+    /// then the receiver answers for itself (status A0) or not at all, so ask the mouse for its
+    /// battery level (a harmless read the vendor driver makes all the time).
+    fn presence(&self) -> Presence {
+        let has = |pid: u16| hid::collections(VID, pid).iter().any(|c| c.usage_page == USAGE_PAGE && c.usage == USAGE);
+        if has(PID_CABLE) {
+            return Presence::Connected;
+        }
+        if !has(PID_RECEIVER) {
+            return Presence::Absent;
+        }
+        // Can't open it (Linux permissions, or another app has it): say it's there, so the app
+        // can offer access or report the problem when it reads.
+        let Ok(link) = Link::open() else { return Presence::Connected };
+        match link.exchange(&request(GET_BATTERY, &[]), true) {
+            Ok(_) | Err(Fail::Unsupported) => Presence::Connected,
+            Err(Fail::Other(_)) => Presence::ReceiverOnly,
+        }
+    }
+
     fn usb_ids(&self) -> Vec<(u16, u16)> {
         vec![(VID, PID_CABLE), (VID, PID_RECEIVER)]
     }

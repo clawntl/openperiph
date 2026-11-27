@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Ui, Vec2};
 
-use crate::device::{Driver, EffectSettings, KeySettings, LightingState, MouseState, MouseStatus};
+use crate::device::{Driver, EffectSettings, KeySettings, LightingState, MouseState, MouseStatus, Presence};
 use crate::keycodes::{KeyAction, MouseAction, KEY_GROUPS, MEDIA, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN};
 use crate::selfupdate::{self, AppRelease, InstallKind};
 use crate::{drivers, hid, qmk, store};
@@ -68,7 +68,7 @@ impl Kind {
 
 enum Msg {
     /// Device index, plugged in, needs permission (Linux).
-    Detected(usize, bool, bool),
+    Detected(usize, Presence, bool),
     /// QMK keyboards found on the system.
     Discovered(Vec<hid::Collection>),
     Qmk(usize, qmk::Event),
@@ -98,6 +98,8 @@ struct DeviceEntry {
     read_once: bool,
     /// Plugged in, but this user may not open it yet (Linux, no udev rule).
     needs_access: bool,
+    /// A wireless device whose receiver is plugged in but which doesn't answer (off or asleep).
+    receiver_only: bool,
     qmk: Option<qmk_ui::QmkState>,
 }
 
@@ -119,6 +121,7 @@ impl DeviceEntry {
             mouse_dirty: false,
             read_once: false,
             needs_access: false,
+            receiver_only: false,
             qmk,
         }
     }
@@ -262,11 +265,13 @@ impl OpenPeriphApp {
     fn poll(&mut self, ctx: &egui::Context) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                Msg::Detected(i, c, access) => {
+                Msg::Detected(i, presence, access) => {
                     self.detecting = false;
                     let d = &mut self.devices[i];
                     let was = d.connected;
-                    let c = c || (self.screenshot.is_some() && self.force_connected == Some(i));
+                    let c = presence == Presence::Connected || (self.screenshot.is_some() && self.force_connected == Some(i));
+                    let was_receiver_only = d.receiver_only;
+                    d.receiver_only = presence == Presence::ReceiverOnly && !c;
                     d.connected = Some(c);
                     d.needs_access = access;
                     if d.qmk.is_some() {
@@ -299,7 +304,13 @@ impl OpenPeriphApp {
                     }
                     let name = d.driver.info().name.clone();
                     if was == Some(true) && !c {
-                        self.set_status(format!("{name} was unplugged."), false);
+                        if d.receiver_only {
+                            self.set_status(format!("{name} is switched off or asleep (its receiver is still plugged in)."), false);
+                        } else {
+                            self.set_status(format!("{name} was unplugged."), false);
+                        }
+                    } else if was_receiver_only && c {
+                        self.set_status(format!("{name} is back."), true);
                     }
                 }
                 Msg::Lighting(i, r) => match r {
@@ -388,9 +399,9 @@ impl OpenPeriphApp {
                 let tx = self.tx.clone();
                 let ctx = ctx.clone();
                 std::thread::spawn(move || {
-                    let found = driver.detect();
-                    let access = found && needs_access(&driver.usb_ids());
-                    let _ = tx.send(Msg::Detected(i, found, access));
+                    let presence = driver.presence();
+                    let access = presence != Presence::Absent && needs_access(&driver.usb_ids());
+                    let _ = tx.send(Msg::Detected(i, presence, access));
                     ctx.request_repaint();
                 });
             }
@@ -456,8 +467,15 @@ impl OpenPeriphApp {
     // Layout
 
     /// Devices to list: the ones plugged in.
+    /// Devices to show: the ones plugged in, plus a wireless one that went to sleep while its
+    /// page is open (so the page doesn't vanish under you).
     fn visible_devices(&self) -> Vec<usize> {
-        (0..self.devices.len()).filter(|&i| self.devices[i].connected == Some(true)).collect()
+        (0..self.devices.len())
+            .filter(|&i| {
+                let d = &self.devices[i];
+                d.connected == Some(true) || (d.receiver_only && self.view == View::Device && self.selected == i)
+            })
+            .collect()
     }
 
     /// Starts updating OpenPeriph (or opens the release page when it can't update itself).
@@ -636,7 +654,8 @@ impl OpenPeriphApp {
             pill(ui, "Up to date", GOOD);
         }
         if !connected {
-            pill(ui, "Plug in the device to apply", TEXT_DIM);
+            let text = if self.devices[self.selected].receiver_only { "Switch the mouse on or move it to apply" } else { "Plug in the device to apply" };
+            pill(ui, text, TEXT_DIM);
         }
         if let Some((pct, charging, wired)) = battery {
             let text = match (charging, wired) {
@@ -1173,7 +1192,7 @@ impl eframe::App for OpenPeriphApp {
         egui::Panel::top("top").exact_size(46.0).resizable(false).frame(Frame::NONE).show(ui, |ui| self.top_bar(ui));
         egui::Panel::bottom("status").exact_size(26.0).resizable(false).frame(Frame::NONE).show(ui, |ui| self.status_bar(ui));
         // A device that was unplugged: back to Home.
-        if self.view == View::Device && self.devices[self.selected].connected == Some(false) {
+        if self.view == View::Device && self.devices[self.selected].connected == Some(false) && !self.devices[self.selected].receiver_only {
             self.view = View::Home;
         }
         egui::CentralPanel::default().frame(Frame::NONE.inner_margin(Margin { left: 16, right: 16, top: 14, bottom: 12 })).show(ui, |ui| match self.view {

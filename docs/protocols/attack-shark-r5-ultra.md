@@ -13,6 +13,7 @@ are used here, no code). Checked read-only on the person's mouse (`shots/mouse_s
 | Request | `[00 status][00][02 target][length tag][category][command][profile][args]` | vendor builds `r[2]=2, r[3]=tag, r[4]=cat, r[5]=cmd, r[6]=profile` |
 | Reply | byte 1 status (A1 ok, A0 mouse asleep, A2 unsupported, A3 rejected), echoes target and command; value at byte 8 (profile number at byte 7) | Shark Deck doc; vendor reads `i[8]` / `o[7]` |
 | Waits | 50 ms after a request (100 ms for firmware/battery), then poll up to ~1 s | Shark Deck doc |
+| Is the mouse there? (receiver only) | battery read `02 00 83`: A1 (or A2) = the mouse answered; A0 or no reply = only the receiver is there (mouse off, asleep or out of range) | Shark Deck doc (A0 = only the receiver answered) |
 | Profiles | 3 onboard; read `01 00 85 00`, write `01 00 05 P` | vendor `getProfileID` |
 | DPI table | read `0A 01 81 P 06`; write tag **1A** `01 01 P n` + n × (X hi, X lo, Y hi, Y lo); 100–42000 in steps of 50, 6 stages | vendor `setDPIStageInfo` (fixed tag 26), `DPIMax`, `DPIMaxStageNum` |
 | Stage in use | read `02 01 82 P`, write `02 01 02 P s` (1-based) | vendor `getActiveDPI` |

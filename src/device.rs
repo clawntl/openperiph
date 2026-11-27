@@ -179,11 +179,29 @@ static EMPTY_LAYOUT: KeyboardLayout = KeyboardLayout { keys: Vec::new(), width: 
 
 /// Every device driver. Keyboard and mouse parts have empty defaults, so a driver only
 /// implements what its hardware has (announced through `capabilities`).
+/// Whether a device can be reached.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Presence {
+    Absent,
+    Connected,
+    /// Its wireless receiver is plugged in, but the device doesn't answer.
+    ReceiverOnly,
+}
+
 pub trait Driver: Send + Sync {
     fn info(&self) -> &DeviceInfo;
     fn capabilities(&self) -> Capabilities;
     /// Whether the device is plugged in.
     fn detect(&self) -> bool;
+    /// Plugged in, not plugged in, or (wireless devices) only the receiver is: the device itself
+    /// is switched off, asleep or out of range.
+    fn presence(&self) -> Presence {
+        if self.detect() {
+            Presence::Connected
+        } else {
+            Presence::Absent
+        }
+    }
     /// USB vendor and product ids the device may show up as (for Linux permissions).
     fn usb_ids(&self) -> Vec<(u16, u16)> {
         vec![(self.info().vendor_id, self.info().product_id)]
