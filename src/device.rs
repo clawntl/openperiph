@@ -72,6 +72,8 @@ pub struct MouseSpec {
     /// Sleep timer choices: seconds and label.
     pub sleep_options: Vec<(u32, &'static str)>,
     pub angle_snap: bool,
+    /// Has Attack Shark's competitive mode (if its firmware answers for it).
+    pub competitive: bool,
 }
 
 /// The settings of one onboard profile.
@@ -86,6 +88,9 @@ pub struct MouseState {
     pub motion_sync: bool,
     pub ripple: bool,
     pub angle_snap: bool,
+    /// Attack Shark's "Hunting Shark competitive mode": the sensor at full performance.
+    #[serde(default)]
+    pub competitive: bool,
     pub debounce_ms: u8,
     pub sleep_secs: u32,
 }
@@ -97,6 +102,8 @@ pub struct MouseStatus {
     pub battery: Option<u8>,
     pub charging: bool,
     pub firmware: Option<String>,
+    /// Whether the mouse answered for competitive mode (None: not read yet).
+    pub competitive_supported: Option<bool>,
 }
 
 /// One key as drawn on screen.

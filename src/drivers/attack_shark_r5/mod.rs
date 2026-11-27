@@ -60,6 +60,9 @@ const GET_MOTION_SYNC: Frame = Frame(0x02, 0x01, 0x89);
 const SET_MOTION_SYNC: Frame = Frame(0x02, 0x01, 0x09);
 const GET_RIPPLE: Frame = Frame(0x02, 0x01, 0x8A);
 const SET_RIPPLE: Frame = Frame(0x02, 0x01, 0x0A);
+/// "Hunting Shark competitive mode" (the vendor's TrackingMode): newer firmware only.
+const GET_COMPETITIVE: Frame = Frame(0x02, 0x01, 0x93);
+const SET_COMPETITIVE: Frame = Frame(0x02, 0x01, 0x13);
 
 /// Polling rate in Hz to its device code. Reads may also answer 0x10 for 1000 Hz.
 const POLL_CODES: [(u32, u8); 7] = [(125, 0x08), (250, 0x04), (500, 0x02), (1000, 0x01), (2000, 0x20), (4000, 0x40), (8000, 0x80)];
@@ -136,6 +139,7 @@ fn spec(wired: bool) -> MouseSpec {
         debounce_max: 20,
         sleep_options: vec![(15, "15 s"), (60, "1 min"), (180, "3 min"), (300, "5 min"), (600, "10 min"), (1800, "30 min")],
         angle_snap: true,
+        competitive: true,
     }
 }
 
@@ -149,6 +153,7 @@ fn default_state() -> MouseState {
         motion_sync: false,
         ripple: false,
         angle_snap: false,
+        competitive: false,
         debounce_ms: 4,
         sleep_secs: 60,
     }
@@ -268,6 +273,9 @@ impl Driver for AttackSharkR5 {
         let poll = link.get(GET_POLL, &[pp])?[8];
         let lod = link.get(GET_LOD, &[pp])?[8];
         let flag = |f: Frame| link.exchange(&request(f, &[pp]), false).ok().map(|r| r[8] == 1);
+        // Older firmware answers "unsupported" (A2): then the switch is hidden.
+        let competitive = flag(GET_COMPETITIVE);
+        status.competitive_supported = Some(competitive.is_some());
         let debounce = link.get(GET_DEBOUNCE, &[pp])?[8];
         let s = link.get(GET_SLEEP, &[pp])?;
         let d = default_state();
@@ -280,6 +288,7 @@ impl Driver for AttackSharkR5 {
             motion_sync: flag(GET_MOTION_SYNC).unwrap_or(false),
             ripple: flag(GET_RIPPLE).unwrap_or(false),
             angle_snap: flag(GET_ANGLE).unwrap_or(false),
+            competitive: competitive.unwrap_or(false),
             debounce_ms: debounce.min(20),
             sleep_secs: ((s[8] as u32) << 8) | s[9] as u32,
         };
@@ -316,6 +325,12 @@ impl Driver for AttackSharkR5 {
         link.set(SET_RIPPLE, &[pp, st.ripple as u8])?;
         // Not every firmware has angle snapping: a refusal here is not an error.
         let _ = link.exchange(&request(SET_ANGLE, &[pp, st.angle_snap as u8]), false);
+        // Competitive mode: only written when the mouse knows it and it needs changing.
+        if let Ok(r) = link.exchange(&request(GET_COMPETITIVE, &[pp]), false) {
+            if (r[8] == 1) != st.competitive {
+                link.set(SET_COMPETITIVE, &[pp, st.competitive as u8])?;
+            }
+        }
 
         progress("Sending power settings…");
         link.set(SET_DEBOUNCE, &[pp, st.debounce_ms.min(sp.debounce_max)])?;
@@ -346,6 +361,11 @@ mod tests {
         assert_eq!(&r[..8], &[0, 0, 0, 0x02, 0x01, 0x00, 0x85, 0x00]);
         let r = request(SET_SLEEP, &[1, 0x00, 0x3C]);
         assert_eq!(&r[3..10], &[0x02, 0x03, 0x00, 0x07, 0x01, 0x00, 0x3C]);
+        // competitive mode, as the vendor's setTrackingMode / getTrackingMode build them
+        let r = request(SET_COMPETITIVE, &[1, 1]);
+        assert_eq!(&r[3..9], &[0x02, 0x02, 0x01, 0x13, 0x01, 0x01]);
+        let r = request(GET_COMPETITIVE, &[1]);
+        assert_eq!(&r[3..8], &[0x02, 0x02, 0x01, 0x93, 0x01]);
     }
 
     #[test]

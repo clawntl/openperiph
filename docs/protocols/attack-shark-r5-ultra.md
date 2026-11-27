@@ -19,6 +19,8 @@ are used here, no code). Checked read-only on the person's mouse (`shots/mouse_s
 | Polling rate | read `02 01 80 P`, write `02 01 00 P code`; 125=08, 250=04, 500=02, 1000=01 (reads may say 10), 2000=20, 4000=40, 8000=80; cable 125–1000, receiver to 8000 | Shark Deck doc (codes); vendor `i[7]==16 → 1`, `PollingRateWired/Wireless` |
 | Lift-off | read `02 01 88 P`, write `02 01 08 P code`; 0.7 mm = 0x87, 1 mm = 01, 2 mm = 02 | vendor `setLOD` (`r*10 | 128` under 1 mm), `LOD=0.7;1;2` |
 | Motion sync / ripple / angle snap | `02 01 09/0A/04 P 0|1` (reads 89/8A/84) | vendor `setMotionSync`, `setAngleSnap`; Shark Deck doc |
+| Competitive mode ("Hunting Shark Competitive Mode", vendor name TrackingMode) | read `02 01 93 P`, write `02 01 13 P 0|1`; value at byte 8. Only on models with `TrackModeEnable` = 1 in env-models.json (R5 Ultra, R6, M5 Ultra, Nov 2026); older firmware answers A2, and OpenPeriph then hides the switch and never writes it | vendor `getTrackingMode` / `setTrackingMode` (driver at xvalleyinno.top/AttackShark, Nov 2026) |
+| High-Speed Mode (vendor HyperMode) | `02 01 0B/8B`; not offered: `HyperModeEnable` is 0 for the R5 Ultra, and it can't be combined with 2–8 kHz polling | vendor `setHyperMode` |
 | Debounce | read `02 00 88 P`, write `02 00 08 P ms`, 0–20 ms | vendor `setDebounceTime`; Shark Deck doc (range) |
 | Sleep | read `03 00 87 P`, write `03 00 07 P hi lo` in seconds, 65535 = never; offered 15 s, 1, 3, 5, 10, 30 min | vendor `setSleepTime`, `SleepTimeGrade`; Shark Deck doc (unit) |
 | Battery / firmware | `02 00 83` (byte 7 charging, 8 %), `10 00 81` (bytes 7–10) | vendor `getFirmwareVersion`; Shark Deck doc |

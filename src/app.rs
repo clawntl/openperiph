@@ -1108,6 +1108,15 @@ impl OpenPeriphApp {
                 if spec.angle_snap {
                     toggle(ui, &mut m.angle_snap, "Angle snapping", "Straightens nearly-straight movements.");
                 }
+                // Shown unless the mouse said it doesn't know this setting (older firmware).
+                if spec.competitive && status.competitive_supported != Some(false) {
+                    toggle(
+                        ui,
+                        &mut m.competitive,
+                        "Hunting Shark competitive mode",
+                        "Runs the sensor at full performance: lower latency and steadier tracking, but the battery runs down faster.",
+                    );
+                }
             });
             card(&mut cols[1], |ui| {
                 ui.label(theme::title("Buttons & power"));
