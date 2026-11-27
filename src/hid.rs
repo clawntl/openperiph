@@ -22,6 +22,8 @@ pub struct Collection {
     pub input_len: u16,
     pub output_len: u16,
     pub feature_len: u16,
+    /// IDs of its feature reports (empty when the device doesn't number its reports).
+    pub feature_ids: Vec<u8>,
     pub manufacturer: String,
     pub product: String,
     pub serial: String,
@@ -38,6 +40,7 @@ pub struct DescCollection {
     pub input_len: u16,
     pub output_len: u16,
     pub feature_len: u16,
+    pub feature_ids: Vec<u8>,
 }
 
 /// Splits a report descriptor into its top-level (application) collections. Also returns
@@ -66,6 +69,7 @@ pub fn parse_descriptor(d: &[u8]) -> (Vec<DescCollection>, bool) {
         c.input_len = len(0);
         c.output_len = len(1);
         c.feature_len = len(2);
+        c.feature_ids = bits.keys().filter(|(k, id)| *k == 2 && *id != 0).map(|(_, id)| *id).collect();
         bits.clear();
     };
 
@@ -158,7 +162,8 @@ mod imp {
     };
     use windows_sys::Win32::Devices::HumanInterfaceDevice::{
         HidD_FreePreparsedData, HidD_GetAttributes, HidD_GetFeature, HidD_GetHidGuid, HidD_GetInputReport, HidD_GetManufacturerString, HidD_GetPreparsedData,
-        HidD_GetProductString, HidD_GetSerialNumberString, HidD_SetFeature, HidP_GetCaps, HIDD_ATTRIBUTES, HIDP_CAPS,
+        HidD_GetProductString, HidD_GetSerialNumberString, HidD_SetFeature, HidP_Feature, HidP_GetButtonCaps, HidP_GetCaps, HidP_GetValueCaps, HIDD_ATTRIBUTES,
+        HIDP_BUTTON_CAPS, HIDP_CAPS, HIDP_VALUE_CAPS,
     };
     use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_IO_PENDING, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0};
     use windows_sys::Win32::Storage::FileSystem::{CreateFileW, ReadFile, WriteFile, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
@@ -335,6 +340,27 @@ mod imp {
                 }
                 let mut caps: HIDP_CAPS = zeroed();
                 let ok = HidP_GetCaps(pre, &mut caps) == HIDP_STATUS_SUCCESS;
+                // the feature report IDs, from the value and button items that carry them
+                let mut feature_ids: Vec<u8> = Vec::new();
+                if ok {
+                    let mut n = caps.NumberFeatureValueCaps;
+                    if n > 0 {
+                        let mut v: Vec<HIDP_VALUE_CAPS> = (0..n).map(|_| zeroed()).collect();
+                        if HidP_GetValueCaps(HidP_Feature, v.as_mut_ptr(), &mut n, pre) == HIDP_STATUS_SUCCESS {
+                            feature_ids.extend(v.iter().take(n as usize).map(|c| c.ReportID));
+                        }
+                    }
+                    let mut n = caps.NumberFeatureButtonCaps;
+                    if n > 0 {
+                        let mut b: Vec<HIDP_BUTTON_CAPS> = (0..n).map(|_| zeroed()).collect();
+                        if HidP_GetButtonCaps(HidP_Feature, b.as_mut_ptr(), &mut n, pre) == HIDP_STATUS_SUCCESS {
+                            feature_ids.extend(b.iter().take(n as usize).map(|c| c.ReportID));
+                        }
+                    }
+                    feature_ids.retain(|id| *id != 0);
+                    feature_ids.sort_unstable();
+                    feature_ids.dedup();
+                }
                 HidD_FreePreparsedData(pre);
                 if ok {
                     out.push(Collection {
@@ -346,6 +372,7 @@ mod imp {
                         input_len: caps.InputReportByteLength,
                         output_len: caps.OutputReportByteLength,
                         feature_len: caps.FeatureReportByteLength,
+                        feature_ids,
                         manufacturer: hid_string(h.h, HidD_GetManufacturerString),
                         product: hid_string(h.h, HidD_GetProductString),
                         serial: hid_string(h.h, HidD_GetSerialNumberString),
@@ -518,6 +545,7 @@ mod imp {
                     input_len: c.input_len,
                     output_len: c.output_len,
                     feature_len: c.feature_len,
+                    feature_ids: c.feature_ids,
                     manufacturer: manufacturer.clone(),
                     product: product.clone(),
                     serial: uniq.clone(),
@@ -656,7 +684,7 @@ mod tests {
         ];
         let (cols, numbered) = parse_descriptor(&d);
         assert!(!numbered);
-        assert_eq!(cols, vec![DescCollection { usage_page: 0xFF60, usage: 0x61, input_len: 33, output_len: 33, feature_len: 0 }]);
+        assert_eq!(cols, vec![DescCollection { usage_page: 0xFF60, usage: 0x61, input_len: 33, output_len: 33, feature_len: 0, feature_ids: vec![] }]);
     }
 
     /// SMK's second interface on the CIY X78: system, consumer, ISP, VIA (feature report 8,
@@ -671,6 +699,23 @@ mod tests {
         assert_eq!((via.usage, via.input_len, via.output_len, via.feature_len), (0x61, 0, 0, 33));
         let isp = cols.iter().find(|c| c.usage_page == 0xFF00).unwrap();
         assert_eq!(isp.feature_len, 6);
+    }
+
+    /// The Sinowealth ISP bootloader (USB 0603:1020) as sinowisp's tests have it: command
+    /// report 5 (5 bytes) and transfer report 6 (2049 bytes, a two-byte REPORT_COUNT), each in
+    /// its own vendor collection.
+    #[test]
+    fn parses_sinowealth_isp_descriptor() {
+        let d = [
+            0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01, 0x85, 0x05, 0x15, 0x00, 0x25, 0xFF, 0x19, 0x01, 0x29, 0x02, 0x75, 0x08, 0x95, 0x05, 0xB1, 0x02, 0xC0, 0x06, 0x00,
+            0xFF, 0x09, 0x01, 0xA1, 0x01, 0x85, 0x06, 0x15, 0x00, 0x25, 0xFF, 0x19, 0x01, 0x29, 0x02, 0x75, 0x08, 0x96, 0x01, 0x08, 0xB1, 0x02, 0xC0,
+        ];
+        let (cols, numbered) = parse_descriptor(&d);
+        assert!(numbered);
+        let lens: Vec<u16> = cols.iter().map(|c| c.feature_len).collect();
+        assert_eq!(lens, vec![6, 2050]);
+        let ids: Vec<Vec<u8>> = cols.iter().map(|c| c.feature_ids.clone()).collect();
+        assert_eq!(ids, vec![vec![5], vec![6]]);
     }
 
     /// Two top-level collections in one interface with report IDs (keyboard + consumer control).

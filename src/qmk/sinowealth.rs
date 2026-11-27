@@ -284,17 +284,51 @@ pub fn in_update_mode() -> bool {
     ISP_PRODUCT_IDS.iter().any(|p| !hid::collections(ISP_VENDOR_ID, *p).is_empty())
 }
 
-/// The bootloader's collections, when a keyboard is in update mode.
-fn find_isp(chip: &Chip) -> Option<(hid::Collection, hid::Collection)> {
+/// The bootloader's collections, when a keyboard is in update mode: the ones carrying feature
+/// reports 5 (commands) and 6 (pages), as sinowisp picks them. On Linux both are usually the
+/// same hidraw node; on Windows each collection is its own device.
+fn find_isp(_chip: &Chip) -> Option<(hid::Collection, hid::Collection)> {
     for pid in ISP_PRODUCT_IDS {
         let cols = hid::collections(ISP_VENDOR_ID, pid);
-        let cmd = cols.iter().find(|c| c.feature_len as usize == CMD_LEN);
-        let xfer = cols.iter().find(|c| c.feature_len as usize == chip.page_size + 2);
+        let cmd = cols.iter().find(|c| c.feature_ids.contains(&REPORT_CMD));
+        let xfer = cols.iter().find(|c| c.feature_ids.contains(&REPORT_XFER));
         if let (Some(c), Some(x)) = (cmd, xfer) {
             return Some((c.clone(), x.clone()));
         }
     }
     None
+}
+
+/// What the system shows of a keyboard in update mode, for the error when it can't be used.
+fn update_mode_report() -> String {
+    let mut seen = Vec::new();
+    for pid in ISP_PRODUCT_IDS {
+        for c in hid::collections(ISP_VENDOR_ID, pid) {
+            seen.push(format!("{} usage {:04X}:{:04X} feature reports {:?} ({} bytes)", c.path, c.usage_page, c.usage, c.feature_ids, c.feature_len));
+        }
+    }
+    #[cfg(target_os = "linux")]
+    if seen.is_empty() {
+        // is there a USB device at all (the HID driver may not have taken it)?
+        let usb = std::fs::read_dir("/sys/bus/usb/devices")
+            .map(|d| {
+                d.flatten().any(|e| {
+                    let id = |f: &str| std::fs::read_to_string(e.path().join(f)).unwrap_or_default().trim().to_lowercase();
+                    id("idVendor") == "0603" && ISP_PRODUCT_IDS.iter().any(|p| id("idProduct") == format!("{p:04x}"))
+                })
+            })
+            .unwrap_or(false);
+        return if usb {
+            "The keyboard's update mode (USB 0603:1020) is on USB, but has no HID device; see `sudo dmesg | tail`.".into()
+        } else {
+            "No update-mode device (USB 0603:1020) appeared.".into()
+        };
+    }
+    if seen.is_empty() {
+        "No update-mode device (USB 0603:1020) appeared.".into()
+    } else {
+        format!("Seen: {}", seen.join("; "))
+    }
 }
 
 /// The whole update: switch the keyboard into its bootloader, flash, enable. The keyboard then
@@ -327,7 +361,10 @@ pub fn update(vendor_id: u16, product_id: u16, chip: &Chip, image: &[u8], progre
             break (cmd, xfer);
         }
         if start.elapsed() > Duration::from_secs(10) {
-            return Err("The keyboard didn't switch to its update mode. Unplug it, plug it back in and try again.".into());
+            return Err(format!(
+                "The keyboard didn't switch to its update mode, so nothing was changed. Unplug it, plug it back in and try again. ({})",
+                update_mode_report()
+            ));
         }
         std::thread::sleep(Duration::from_millis(300));
     };

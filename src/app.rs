@@ -500,7 +500,9 @@ impl OpenPeriphApp {
         (0..self.devices.len())
             .filter(|&i| {
                 let d = &self.devices[i];
-                d.connected == Some(true) || (d.receiver_only && self.view == View::Device && self.selected == i)
+                // a keyboard being updated drops off USB into its update mode: keep it listed
+                let updating = d.qmk.as_ref().is_some_and(|q| q.flashing() || q.awaiting_replug());
+                d.connected == Some(true) || updating || (d.receiver_only && self.view == View::Device && self.selected == i)
             })
             .collect()
     }
@@ -1318,7 +1320,9 @@ impl eframe::App for OpenPeriphApp {
         egui::Panel::top("top").exact_size(46.0).resizable(false).frame(Frame::NONE).show(ui, |ui| self.top_bar(ui));
         egui::Panel::bottom("status").exact_size(26.0).resizable(false).frame(Frame::NONE).show(ui, |ui| self.status_bar(ui));
         // A device that was unplugged: back to Home.
-        if self.view == View::Device && self.devices[self.selected].connected == Some(false) && !self.devices[self.selected].receiver_only {
+        // (not one in the middle of a firmware update: it drops off USB into its update mode)
+        let updating = self.devices[self.selected].qmk.as_ref().is_some_and(|q| q.flashing() || q.awaiting_replug());
+        if self.view == View::Device && self.devices[self.selected].connected == Some(false) && !self.devices[self.selected].receiver_only && !updating {
             self.view = View::Home;
         }
         egui::CentralPanel::default().frame(Frame::NONE.inner_margin(Margin { left: 16, right: 16, top: 14, bottom: 12 })).show(ui, |ui| match self.view {

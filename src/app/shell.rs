@@ -227,6 +227,9 @@ impl OpenPeriphApp {
             if q.flashing() {
                 return ("Updating firmware…", ACCENT);
             }
+            if q.awaiting_replug() {
+                return ("Unplug it and plug it back in", WARN);
+            }
             if q.update_available().is_some() {
                 return ("Firmware update available", ACCENT);
             }
