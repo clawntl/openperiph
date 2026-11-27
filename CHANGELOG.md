@@ -5,6 +5,8 @@ version, and the section becomes the release notes on GitHub.
 
 ## Unreleased
 
+## v0.6.3 (2026-11-27)
+
 - CIY X78 on SMK: fixed updates stopping with "The keyboard didn't switch to its update mode".
   The keyboard did switch, but on Linux the kernel's HID driver doesn't take its update mode, so
   there was nothing for OpenPeriph to open. OpenPeriph now talks to it over raw USB in that case
